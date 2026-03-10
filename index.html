@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Biblioteca</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, body { font-family: 'DM Sans', sans-serif; }
+    .mono { font-family: 'DM Mono', monospace; }
+    .nav-active { background: rgba(255,255,255,0.18); font-weight: 600; border-left: 3px solid #60a5fa; }
+    .fade-in { animation: fi .2s ease; }
+    @keyframes fi { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+    .stat-card { transition:.18s cubic-bezier(.4,0,.2,1); }
+    .stat-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.1); }
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:3px}
+    .autocomplete-box { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); z-index:100; max-height:220px; overflow-y:auto; }
+    .autocomplete-item { padding:10px 14px; cursor:pointer; font-size:.875rem; display:flex; align-items:center; gap:8px; }
+    .autocomplete-item:hover, .autocomplete-item.active { background:#eff6ff; }
+    .autocomplete-item .code { font-family:'DM Mono',monospace; color:#1d4ed8; font-weight:600; font-size:.8rem; }
+    .pos-rel { position:relative; }
+    .tab-hidden { display:none; }
+    tr.moroso td { background: #fff5f5; }
+    .sidebar { transition: transform .3s ease; }
+    @media(max-width:768px){ 
+      .sidebar { position:fixed; top:0; left:0; height:100vh; z-index:200; transform:translateX(-100%); }
+      .sidebar.open { transform:translateX(0); }
+      .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:199; }
+      .overlay.show { display:block; }
+    }
+    .chip { display:inline-flex; align-items:center; gap:4px; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:2px 10px 2px 8px; font-size:.78rem; font-weight:600; margin:2px; }
+    .chip .rm { cursor:pointer; color:#93c5fd; font-size:1rem; line-height:1; }
+    .chip .rm:hover { color:#1d4ed8; }
+    .recurso-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; cursor:pointer; transition:.12s; }
+    .recurso-item:hover { background:#f0f9ff; }
+    .recurso-item input[type=checkbox] { accent-color:#2563eb; width:16px; height:16px; }
+  </style>
+</head>
+<body class="bg-slate-100 text-gray-800">
+
+<!-- Mobile overlay -->
+<div id="overlay" class="overlay" onclick="toggleSidebar()"></div>
+
+<!-- Layout -->
+<div class="min-h-screen flex">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="sidebar bg-gradient-to-b from-blue-950 to-blue-900 text-white w-64 flex-shrink-0 p-5 flex flex-col min-h-screen">
+    <div class="mb-7 flex items-center gap-3">
+      <div class="w-10 h-10 bg-blue-400/20 rounded-xl flex items-center justify-center text-2xl">📚</div>
+      <div>
+        <h1 class="text-lg font-bold leading-tight">Biblioteca</h1>
+        <p class="text-blue-300 text-xs">Sistema de Gestión</p>
+      </div>
+    </div>
+    <nav class="space-y-1 flex-1">
+      <button onclick="showTab('dashboard')"    class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="dashboard"><span class="text-base">📊</span> Dashboard</button>
+      <button onclick="showTab('socios')"       class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="socios"><span class="text-base">👥</span> Socios</button>
+      <button onclick="showTab('recursos')"     class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="recursos"><span class="text-base">📖</span> Recursos</button>
+      <button onclick="showTab('prestamos')"    class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="prestamos"><span class="text-base">🔄</span> Préstamos</button>
+      <button onclick="showTab('devoluciones')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="devoluciones"><span class="text-base">✅</span> Devoluciones</button>
+      <button onclick="showTab('morosos')"      class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="morosos"><span class="text-base">⚠️</span> Morosos</button>
+      <button onclick="showTab('movimientos')"  class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/10 transition flex items-center gap-2.5 text-sm" data-tab="movimientos"><span class="text-base">📅</span> Movimientos</button>
+      <hr class="border-white/15 my-3">
+      <button onclick="backupData()" class="w-full text-left px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition flex items-center gap-2.5 text-sm"><span class="text-base">💾</span> Resguardo Seguro</button>
+      <button onclick="restoreBackup()" class="w-full text-left px-4 py-2.5 rounded-lg bg-amber-600/80 hover:bg-amber-500/80 transition flex items-center gap-2.5 text-sm mt-1"><span class="text-base">📂</span> Restaurar</button>
+      <hr class="border-white/15 my-2">
+      <button onclick="abrirGestionDB()" class="w-full text-left px-4 py-2.5 rounded-lg bg-rose-700/80 hover:bg-rose-600/80 transition flex items-center gap-2.5 text-sm mt-1"><span class="text-base">🗄️</span> Gestión de Base</button>
+    </nav>
+    <div class="mt-4 pt-4 border-t border-white/10">
+      <p class="text-xs text-blue-300 text-center">v2.2 · 1300 socios cargados</p>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- Mobile topbar -->
+    <div class="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-50">
+      <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <span class="font-bold text-gray-800">📚 Biblioteca</span>
+    </div>
+
+    <main class="flex-1 p-4 md:p-7 overflow-y-auto">
+
+      <!-- ── DASHBOARD ── -->
+      <div id="dashboard-tab" class="tab-pane fade-in">
+        <h2 class="text-2xl font-bold mb-6">Dashboard</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card bg-white rounded-xl shadow-sm p-5 border-t-4 border-blue-500">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wide mb-1">Recursos</p>
+            <p id="cnt-recursos" class="text-3xl font-bold text-gray-800">0</p>
+          </div>
+          <div class="stat-card bg-white rounded-xl shadow-sm p-5 border-t-4 border-green-500">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wide mb-1">Socios</p>
+            <p id="cnt-socios" class="text-3xl font-bold text-gray-800">0</p>
+          </div>
+          <div class="stat-card bg-white rounded-xl shadow-sm p-5 border-t-4 border-orange-500">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wide mb-1">Préstamos Activos</p>
+            <p id="cnt-prestamos" class="text-3xl font-bold text-gray-800">0</p>
+          </div>
+          <div class="stat-card bg-white rounded-xl shadow-sm p-5 border-t-4 border-red-500">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wide mb-1">Morosos</p>
+            <p id="cnt-morosos" class="text-3xl font-bold text-gray-800">0</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-base mb-3">Préstamos Recientes</h3>
+            <div id="dash-recientes"></div>
+          </div>
+          <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-base mb-3">Recursos Más Prestados</h3>
+            <div id="dash-populares"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SOCIOS ── -->
+      <div id="socios-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Gestión de Socios</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-4">
+            <input id="buscar-socio" type="text" placeholder="🔍 Buscar por código o nombre…"
+              class="flex-1 min-w-44 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              oninput="renderSocios()">
+            <button onclick="abrirModalSocio()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">+ Nuevo Socio</button>
+            <button onclick="importarSocios()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">📥 Importar</button>
+            <button onclick="exportarSociosExcel()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar Excel</button>
+            <button onclick="importarSociosExcel()" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium">📥 Importar Excel</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs uppercase text-gray-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Código</th>
+                  <th class="px-4 py-3 text-left">Nombre</th>
+                  <th class="px-4 py-3 text-left">Préstamos Activos</th>
+                  <th class="px-4 py-3 text-left">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-socios" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RECURSOS ── -->
+      <div id="recursos-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Gestión de Recursos</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-4">
+            <input id="buscar-recurso" type="text" placeholder="🔍 Buscar por código o título…"
+              class="flex-1 min-w-44 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              oninput="renderRecursos()">
+            <button onclick="abrirModalRecurso()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">+ Nuevo Recurso</button>
+            <button onclick="importarRecursos()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">📥 Importar</button>
+            <button onclick="exportarRecursos()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs uppercase text-gray-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Código</th>
+                  <th class="px-4 py-3 text-left">Título</th>
+                  <th class="px-4 py-3 text-left">Estado</th>
+                  <th class="px-4 py-3 text-left">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-recursos" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PRÉSTAMOS ── -->
+      <div id="prestamos-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Gestión de Préstamos</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button onclick="abrirModalPrestamo()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">+ Nuevo Préstamo</button>
+            <input id="buscar-prestamo" type="text" placeholder="🔍 Buscar socio o recurso…"
+              class="flex-1 min-w-44 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              oninput="renderPrestamos()">
+            <button onclick="exportarPrestamos()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar Excel</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs uppercase text-gray-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Cod. Socio</th>
+                  <th class="px-4 py-3 text-left">Nombre Socio</th>
+                  <th class="px-4 py-3 text-left">Cod. Recurso</th>
+                  <th class="px-4 py-3 text-left">Título</th>
+                  <th class="px-4 py-3 text-left">Tipo</th>
+                  <th class="px-4 py-3 text-left">F. Préstamo</th>
+                  <th class="px-4 py-3 text-left">F. Vencimiento</th>
+                  <th class="px-4 py-3 text-left">Estado</th>
+                  <th class="px-4 py-3 text-left">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-prestamos" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DEVOLUCIONES ── -->
+      <div id="devoluciones-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Gestión de Devoluciones</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-4">
+            <input id="buscar-devolucion" type="text" placeholder="🔍 Buscar por socio o recurso…"
+              class="flex-1 min-w-44 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              oninput="renderDevoluciones()">
+            <button onclick="exportarDevoluciones()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar Excel</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs uppercase text-gray-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Cod. Socio</th>
+                  <th class="px-4 py-3 text-left">Nombre Socio</th>
+                  <th class="px-4 py-3 text-left">Cod. Recurso</th>
+                  <th class="px-4 py-3 text-left">Título</th>
+                  <th class="px-4 py-3 text-left">Tipo</th>
+                  <th class="px-4 py-3 text-left">F. Préstamo</th>
+                  <th class="px-4 py-3 text-left">Vencimiento</th>
+                  <th class="px-4 py-3 text-left">Estado</th>
+                  <th class="px-4 py-3 text-left">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-devoluciones" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── MOROSOS ── -->
+      <div id="morosos-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Listado de Morosos</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-4">
+            <input id="buscar-moroso" type="text" placeholder="🔍 Buscar moroso…"
+              class="flex-1 min-w-44 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+              oninput="renderMorosos()">
+            <button onclick="exportarMorosos()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar Excel</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-red-50 text-xs uppercase text-red-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Cod. Socio</th>
+                  <th class="px-4 py-3 text-left">Nombre Socio</th>
+                  <th class="px-4 py-3 text-left">Cod. Recurso</th>
+                  <th class="px-4 py-3 text-left">Título</th>
+                  <th class="px-4 py-3 text-left">Tipo</th>
+                  <th class="px-4 py-3 text-left">F. Préstamo</th>
+                  <th class="px-4 py-3 text-left">Vencimiento</th>
+                  <th class="px-4 py-3 text-left">Días Vencido</th>
+                  <th class="px-4 py-3 text-left">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-morosos" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── MOVIMIENTOS ── -->
+      <div id="movimientos-tab" class="tab-pane tab-hidden fade-in">
+        <h2 class="text-2xl font-bold mb-6">Movimientos por Mes</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5">
+          <div class="flex flex-wrap gap-2 mb-5 items-end">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Mes y Año</label>
+              <input id="mov-mes" type="month" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" oninput="renderMovimientos()">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Tipo</label>
+              <select id="mov-tipo" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="renderMovimientos()">
+                <option value="">Todos</option>
+                <option value="prestado">Préstamos</option>
+                <option value="devuelto">Devoluciones</option>
+                <option value="moroso">Morosos</option>
+              </select>
+            </div>
+            <button onclick="exportarMovimientos()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">📤 Exportar Excel</button>
+          </div>
+          <div id="mov-resumen" class="grid grid-cols-3 gap-3 mb-5"></div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs uppercase text-gray-400 tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Cod. Socio</th>
+                  <th class="px-4 py-3 text-left">Nombre Socio</th>
+                  <th class="px-4 py-3 text-left">Cod. Recurso</th>
+                  <th class="px-4 py-3 text-left">Título</th>
+                  <th class="px-4 py-3 text-left">Tipo Préstamo</th>
+                  <th class="px-4 py-3 text-left">Fecha</th>
+                  <th class="px-4 py-3 text-left">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-movimientos" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════ MODALES ═══════════ -->
+
+<!-- Modal Socio -->
+<div id="modal-socio" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <h3 id="modal-socio-titulo" class="text-xl font-bold mb-4">Nuevo Socio</h3>
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Código *</label>
+      <input id="socio-f-codigo" type="text" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Ej: PE1, PR2-A-1, SE-2-1-1">
+    </div>
+    <div class="mb-5">
+      <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Nombre *</label>
+      <input id="socio-f-nombre" type="text" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+    </div>
+    <div class="flex gap-2 justify-end">
+      <button onclick="cerrarModal('modal-socio')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Cancelar</button>
+      <button onclick="guardarSocio()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Recurso -->
+<div id="modal-recurso" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <h3 id="modal-recurso-titulo" class="text-xl font-bold mb-4">Nuevo Recurso</h3>
+    <div class="mb-3">
+      <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Código *</label>
+      <input id="recurso-f-codigo" type="text" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+    </div>
+    <div class="mb-5">
+      <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Título *</label>
+      <input id="recurso-f-titulo" type="text" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+    </div>
+    <div class="flex gap-2 justify-end">
+      <button onclick="cerrarModal('modal-recurso')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Cancelar</button>
+      <button onclick="guardarRecurso()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Préstamo (MEJORADO - hasta 3 ejemplares, búsqueda por código y nombre) -->
+<div id="modal-prestamo" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto">
+    <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+      <h3 class="text-xl font-bold">Nuevo Préstamo</h3>
+      <button onclick="cerrarModal('modal-prestamo')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="px-6 py-5 space-y-5">
+
+      <!-- SOCIO con autocomplete -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Socio * <span class="text-blue-500 normal-case font-normal">(buscar por código o nombre)</span></label>
+        <div class="pos-rel">
+          <input id="p-buscar-socio" type="text" placeholder="Escribí código o nombre del socio…" autocomplete="off"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+            oninput="filtrarSociosAC()" onfocus="filtrarSociosAC()">
+          <div id="ac-socios" class="autocomplete-box hidden"></div>
+        </div>
+        <div id="p-socio-seleccionado" class="hidden mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="font-semibold text-blue-800" id="p-socio-nombre">—</span>
+              <span class="text-blue-500 mono text-xs ml-2" id="p-socio-codigo">—</span>
+            </div>
+            <button onclick="limpiarSocio()" class="text-blue-400 hover:text-red-500 text-xs">✕ Cambiar</button>
+          </div>
+          <div id="p-socio-prestamos" class="mt-1 text-xs text-blue-600"></div>
+        </div>
+        <input type="hidden" id="p-socio-id">
+      </div>
+
+      <!-- RECURSOS con autocomplete + chips -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
+          Recursos * <span class="text-blue-500 normal-case font-normal">(buscar por código o título, hasta 3 ejemplares)</span>
+        </label>
+        <!-- Chips de recursos seleccionados -->
+        <div id="p-chips-recursos" class="flex flex-wrap gap-1 min-h-8 mb-2 p-2 bg-gray-50 border border-gray-200 rounded-lg"></div>
+        <div class="pos-rel">
+          <input id="p-buscar-recurso" type="text" placeholder="Escribí código o título del recurso…" autocomplete="off"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+            oninput="filtrarRecursosAC()" onfocus="filtrarRecursosAC()">
+          <div id="ac-recursos" class="autocomplete-box hidden"></div>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">Seleccionados: <span id="p-cnt-recursos" class="font-bold text-blue-600">0</span> / 3</p>
+      </div>
+
+      <!-- TIPO -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Tipo de Préstamo *</label>
+        <select id="p-tipo" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none" onchange="toggleTipoCustom()">
+          <option value="">-- Seleccionar --</option>
+          <option value="Aula">Aula</option>
+          <option value="Domicilio">Domicilio</option>
+          <option value="Departamento">Departamento</option>
+          <option value="Otro">Otro (especificar)</option>
+        </select>
+        <input id="p-tipo-custom" type="text" placeholder="Especificá el tipo…"
+          class="hidden w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm mt-2 focus:ring-2 focus:ring-blue-400 outline-none">
+      </div>
+
+      <!-- FECHA VENCIMIENTO -->
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Fecha de Vencimiento *</label>
+        <input id="p-fecha-venc" type="date" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-400 outline-none">
+      </div>
+
+      <!-- RESUMEN -->
+      <div id="p-resumen" class="hidden bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800"></div>
+    </div>
+
+    <div class="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex gap-2 justify-end">
+      <button onclick="cerrarModal('modal-prestamo')" class="px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Cancelar</button>
+      <button onclick="guardarPrestamo()" class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold">✓ Registrar Préstamo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ver Recursos del Socio -->
+<div id="modal-ver-recursos" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+    <h3 id="ver-recursos-titulo" class="text-xl font-bold mb-4">Recursos del Socio</h3>
+    <div id="ver-recursos-body" class="mb-4 space-y-3 max-h-80 overflow-y-auto"></div>
+    <button onclick="cerrarModal('modal-ver-recursos')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Cerrar</button>
+  </div>
+</div>
+
+<!-- Modal de confirmación de resguardo -->
+<div id="modal-backup" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+    <div class="text-4xl mb-3">💾</div>
+    <h3 class="text-lg font-bold mb-2">Resguardo Seguro</h3>
+    <p class="text-sm text-gray-500 mb-5">Se descargará un archivo JSON encriptado con todos los datos y un Excel completo.</p>
+    <div class="flex gap-2">
+      <button onclick="cerrarModal('modal-backup')" class="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">Cancelar</button>
+      <button onclick="ejecutarBackup()" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold">Descargar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Input file oculto -->
+<input type="file" id="file-input" class="hidden" accept=".xlsx,.xls">
+<input type="file" id="file-restore" class="hidden" accept=".json">
+<input type="file" id="file-socios-excel" class="hidden" accept=".xlsx,.xls">
+
+<!-- Modal Gestión de Base de Datos -->
+<div id="modal-gestion-db" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center text-2xl">🗄️</div>
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">Gestión de Base de Datos</h3>
+        <p class="text-xs text-gray-500">Administrar la base de datos del sistema</p>
+      </div>
+    </div>
+    <!-- Sección: Exportar/Importar Socios -->
+    <div class="bg-violet-50 border border-violet-200 rounded-lg p-4 mb-4">
+      <p class="text-sm font-semibold text-violet-800 mb-1">📋 Lista de Socios (Excel)</p>
+      <p class="text-xs text-violet-600 mb-3">Exportá la lista completa, modificala en Excel y volvé a importarla.</p>
+      <div class="flex gap-2">
+        <button onclick="exportarSociosExcel(); cerrarModal('modal-gestion-db')" 
+          class="flex-1 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold">
+          📤 Exportar Excel
+        </button>
+        <button onclick="cerrarModal('modal-gestion-db'); importarSociosExcel()" 
+          class="flex-1 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold">
+          📥 Importar Excel
+        </button>
+      </div>
+    </div>
+    <!-- Sección: Reemplazar Base -->
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+      <p class="text-sm font-semibold text-amber-800 mb-1">🔄 Reemplazar Base Completa</p>
+      <p class="text-xs text-amber-600 mb-3">Cargá una nueva base desde un archivo JSON de resguardo. Reemplaza todo.</p>
+      <button onclick="cerrarModal('modal-gestion-db'); restoreBackup()" 
+        class="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold">
+        📂 Cargar Resguardo JSON
+      </button>
+    </div>
+    <!-- Sección: Dar de baja selectiva -->
+    <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-5">
+      <p class="text-sm font-semibold text-red-700 mb-1">⚠️ Dar de Baja Datos</p>
+      <p class="text-xs text-red-500 mb-3">Elegí qué datos querés eliminar. Los préstamos se conservan si solo eliminás socios o recursos.</p>
+      <button onclick="cerrarModal('modal-gestion-db'); abrirBajaSelectiva()" 
+        class="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold">
+        🗑️ Seleccionar y Dar de Baja…
+      </button>
+    </div>
+    <div class="flex justify-end">
+      <button onclick="cerrarModal('modal-gestion-db')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal baja selectiva de datos -->
+<div id="modal-baja-db" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="text-4xl">🗑️</div>
+      <div>
+        <h3 class="text-lg font-bold text-red-700">Dar de Baja Datos</h3>
+        <p class="text-xs text-gray-500">Seleccioná qué tablas querés vaciar</p>
+      </div>
+    </div>
+
+    <!-- Checkboxes de selección -->
+    <div class="space-y-3 mb-5">
+
+      <!-- SOCIOS -->
+      <label id="lbl-baja-socios" class="flex items-start gap-3 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-red-300 transition select-none" onclick="toggleBajaCheck('socios')">
+        <div class="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 flex items-center justify-center flex-shrink-0 transition" id="check-socios">
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-gray-800">👥 Socios</p>
+          <p class="text-xs text-gray-500">Elimina la lista de socios (códigos y nombres).</p>
+          <div id="aviso-socios" class="hidden mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+            ⚠️ <strong>Los préstamos, devoluciones y morosos se conservan</strong>, aunque los nombres no se podrán resolver hasta cargar una nueva base de socios.
+          </div>
+        </div>
+      </label>
+
+      <!-- RECURSOS -->
+      <label id="lbl-baja-recursos" class="flex items-start gap-3 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-red-300 transition select-none" onclick="toggleBajaCheck('recursos')">
+        <div class="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 flex items-center justify-center flex-shrink-0 transition" id="check-recursos">
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-gray-800">📖 Recursos</p>
+          <p class="text-xs text-gray-500">Elimina el catálogo de recursos (libros, materiales, etc.).</p>
+          <div id="aviso-recursos" class="hidden mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+            ⚠️ <strong>Los préstamos, devoluciones y morosos se conservan</strong>, aunque los títulos no se podrán resolver hasta cargar un nuevo catálogo.
+          </div>
+        </div>
+      </label>
+
+      <!-- PRÉSTAMOS -->
+      <label id="lbl-baja-prestamos" class="flex items-start gap-3 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-red-300 transition select-none" onclick="toggleBajaCheck('prestamos')">
+        <div class="mt-0.5 w-5 h-5 rounded border-2 border-gray-300 flex items-center justify-center flex-shrink-0 transition" id="check-prestamos">
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-gray-800">🔄 Préstamos, Devoluciones y Morosos</p>
+          <p class="text-xs text-gray-500">Elimina todo el historial de préstamos activos, devueltos y morosos.</p>
+          <div id="aviso-prestamos" class="hidden mt-1.5 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+            🚨 <strong>Esta acción borra el historial completo.</strong> Se recomienda hacer un resguardo antes.
+          </div>
+        </div>
+      </label>
+
+    </div>
+
+    <!-- Resumen de lo que se va a hacer -->
+    <div id="baja-resumen" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+      <p class="text-xs font-semibold text-red-700 mb-1">Se eliminarán:</p>
+      <ul id="baja-resumen-lista" class="text-xs text-red-600 space-y-0.5"></ul>
+    </div>
+
+    <div id="baja-sin-seleccion" class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center">
+      <p class="text-xs text-gray-400">Seleccioná al menos una opción para continuar.</p>
+    </div>
+
+    <div class="flex gap-2">
+      <button onclick="cerrarModal('modal-baja-db')" 
+        class="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
+        Cancelar
+      </button>
+      <button id="btn-ejecutar-baja" onclick="ejecutarBajaDB()" disabled
+        class="flex-1 px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-semibold cursor-not-allowed transition" >
+        Eliminar seleccionado
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-5 right-5 z-[300] bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl text-sm font-medium flex items-center gap-2"></div>
+
+<!-- ═══════════ SCRIPT ═══════════ -->
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════
+// CONSTANTES
+// ══════════════════════════════════════════════
+const STORAGE_KEY = 'bib_v2';
+const SALT = 'bib2025@secure';
+
+// ══════════════════════════════════════════════
+// DB
+// ══════════════════════════════════════════════
+let DB = { socios: [], recursos: [], prestamos: [] };
+const SOCIOS_SEED = [{"codigo": "PE1", "nombre": "Abascal Juan Matías"}, {"codigo": "PE2", "nombre": "Abeijon Moran Erika Judith"}, {"codigo": "PE3", "nombre": "Aguilar Agustina Marcela"}, {"codigo": "PE4", "nombre": "Albornoz Camila Sol"}, {"codigo": "PE5", "nombre": "Alcodoy Karen"}, {"codigo": "PE6", "nombre": "Altamirano Maria Belen"}, {"codigo": "PE7", "nombre": "Alvarez Daniel Ramiro"}, {"codigo": "PE8", "nombre": "Alvarez Marianela"}, {"codigo": "PE9", "nombre": "Ambrosius Lynn"}, {"codigo": "PE10", "nombre": "Arana Paula Andrea"}, {"codigo": "PE11", "nombre": "Ardanaz Micaela"}, {"codigo": "PE12", "nombre": "Arias Manuela"}, {"codigo": "PE13", "nombre": "Arias Milena Naiquén"}, {"codigo": "PE14", "nombre": "Armesto Lucero Ailén"}, {"codigo": "PE15", "nombre": "Astiz Patricia"}, {"codigo": "PE16", "nombre": "Ayerbe Mariana Beatriz"}, {"codigo": "PE17", "nombre": "Ballestero Héctor"}, {"codigo": "PE18", "nombre": "Barci Karina Delia"}, {"codigo": "PE19", "nombre": "Barreda Patricia Livia"}, {"codigo": "PE20", "nombre": "Barrionuevo Mariela Antonela"}, {"codigo": "PE21", "nombre": "Barrionuevo Nadia Jesica"}, {"codigo": "PE22", "nombre": "Bece Adriana Aurora"}, {"codigo": "PE23", "nombre": "Biera Carmen Silvia Vanesa"}, {"codigo": "PE24", "nombre": "Bigliardi Carla"}, {"codigo": "PE25", "nombre": "Blanco Roxana"}, {"codigo": "PE26", "nombre": "Bonifacio Leandro"}, {"codigo": "PE27", "nombre": "Botana Silvina"}, {"codigo": "PE28", "nombre": "Buzzi Ariana Marcela"}, {"codigo": "PE29", "nombre": "Calvo Cintia Marina"}, {"codigo": "PE30", "nombre": "Caparros Laura Veronica"}, {"codigo": "PE31", "nombre": "Carrera María Agustina"}, {"codigo": "PE32", "nombre": "Casariego Jaqueline"}, {"codigo": "PE33", "nombre": "Catulo Horacio Gustavo"}, {"codigo": "PE34", "nombre": "Cedron Maria Celeste"}, {"codigo": "PE35", "nombre": "Ceriani Lorena Vanesa"}, {"codigo": "PE36", "nombre": "Cernuda Gustavo Fabian"}, {"codigo": "PE37", "nombre": "Cirone Vanesa"}, {"codigo": "PE38", "nombre": "Citta Maria Dolores"}, {"codigo": "PE39", "nombre": "Come Vanesa"}, {"codigo": "PE40", "nombre": "Comes Karina Veronica"}, {"codigo": "PE41", "nombre": "Conde Maria Victoria"}, {"codigo": "PE42", "nombre": "Contigiani Juan Carlos"}, {"codigo": "PE43", "nombre": "Costa Javier Enzo"}, {"codigo": "PE44", "nombre": "Croce Hernan David"}, {"codigo": "PE45", "nombre": "Cuesta Manuel"}, {"codigo": "PE46", "nombre": "Dalla Zanna Leoni"}, {"codigo": "PE47", "nombre": "De Cicco Adrian"}, {"codigo": "PE48", "nombre": "De Cicco Luisella Anahi"}, {"codigo": "PE49", "nombre": "De Piero Tomás"}, {"codigo": "PE50", "nombre": "Del Molino Masan Romina Mara"}, {"codigo": "PE51", "nombre": "Destain Berenice"}, {"codigo": "PE52", "nombre": "Di Francesco Domingo Marcelo"}, {"codigo": "PE53", "nombre": "Di Marco Agustina"}, {"codigo": "PE54", "nombre": "Di Rocco Marina Soledad"}, {"codigo": "PE55", "nombre": "Di Tommaso Lucrecia Soledad"}, {"codigo": "PE56", "nombre": "Diaz Lucrecia"}, {"codigo": "PE57", "nombre": "Dolade Roberto Ceferino"}, {"codigo": "PE58", "nombre": "Dominguez Guillermina"}, {"codigo": "PE59", "nombre": "Dominguez Maria De Las Mercedes"}, {"codigo": "PE60", "nombre": "Drago Paulo Juan Daniel"}, {"codigo": "PE61", "nombre": "Dufour Gabriela"}, {"codigo": "PE62", "nombre": "Escudero Josefina"}, {"codigo": "PE63", "nombre": "Escudero Maria Andrea"}, {"codigo": "PE64", "nombre": "Eseiza Sofía"}, {"codigo": "PE65", "nombre": "Fazaro Melisa"}, {"codigo": "PE66", "nombre": "Ferenz Nadia Ayelén"}, {"codigo": "PE67", "nombre": "Fernández Agustina"}, {"codigo": "PE68", "nombre": "Ferrari Juan Sebastián"}, {"codigo": "PE69", "nombre": "Ferrario Luis Patricio"}, {"codigo": "PE70", "nombre": "Ferrario Milagros"}, {"codigo": "PE71", "nombre": "Fioriti Karina Andrea"}, {"codigo": "PE72", "nombre": "Fittipaldi Eliana"}, {"codigo": "PE73", "nombre": "Folonier Jorge Ariel"}, {"codigo": "PE74", "nombre": "Fosque Etelvina Cora"}, {"codigo": "PE75", "nombre": "Fredes Melisa Alejandra"}, {"codigo": "PE76", "nombre": "Gago Cintia Marina"}, {"codigo": "PE77", "nombre": "Gaitan Luciana Evelyn"}, {"codigo": "PE78", "nombre": "Galeano Veronica Ines"}, {"codigo": "PE79", "nombre": "Galiano Sandra Elisabet"}, {"codigo": "PE80", "nombre": "Galli Sebastián"}, {"codigo": "PE81", "nombre": "Gamos Adriana Lujan"}, {"codigo": "PE82", "nombre": "Garcia Ivan"}, {"codigo": "PE83", "nombre": "Garcia Paula Mariana"}, {"codigo": "PE84", "nombre": "Garzón Luna"}, {"codigo": "PE85", "nombre": "Genisio Francisco"}, {"codigo": "PE86", "nombre": "Ghersi Noelia Soledad"}, {"codigo": "PE87", "nombre": "Giuliani Melisa Andrea"}, {"codigo": "PE88", "nombre": "Gonzales Maria Laura"}, {"codigo": "PE89", "nombre": "Gonzalez Alejandro Roberto"}, {"codigo": "PE90", "nombre": "Gonzalez Maria Jose"}, {"codigo": "PE91", "nombre": "Gonzalez Mariel"}, {"codigo": "PE92", "nombre": "González Agustín"}, {"codigo": "PE93", "nombre": "González Alexis"}, {"codigo": "PE94", "nombre": "González María Del Luján"}, {"codigo": "PE95", "nombre": "González Roberto"}, {"codigo": "PE96", "nombre": "Grondona Milagros"}, {"codigo": "PE97", "nombre": "Guerrero Cintia"}, {"codigo": "PE98", "nombre": "Guido Maria Florencia"}, {"codigo": "PE99", "nombre": "Gutierrez Jorgelina"}, {"codigo": "PE100", "nombre": "Gutierrez Vanina Gabriela"}, {"codigo": "PE101", "nombre": "Heim Maria Alejandra"}, {"codigo": "PE102", "nombre": "Heredia Ana Carolina"}, {"codigo": "PE103", "nombre": "Hernández Alberdi Tomás"}, {"codigo": "PE104", "nombre": "Hinding Laporte Jazmin Beatriz"}, {"codigo": "PE105", "nombre": "Hiriart Victoria Araceli"}, {"codigo": "PE106", "nombre": "Huici Ivana Betina"}, {"codigo": "PE107", "nombre": "Insua Marina"}, {"codigo": "PE108", "nombre": "Iriarte Lucia"}, {"codigo": "PE109", "nombre": "Jatib Luzzi Maria Celeste"}, {"codigo": "PE110", "nombre": "Jensen Ana Raquel"}, {"codigo": "PE111", "nombre": "Jensen Florencia"}, {"codigo": "PE112", "nombre": "Jensen Micaela"}, {"codigo": "PE113", "nombre": "Jensen Pablo Christian"}, {"codigo": "PE114", "nombre": "Jorgensen Valeria"}, {"codigo": "PE115", "nombre": "Lamberta Jorge Miguel"}, {"codigo": "PE116", "nombre": "Lavorato Ornella Natalia"}, {"codigo": "PE117", "nombre": "Lazcano Maria Jose"}, {"codigo": "PE118", "nombre": "Leveni Federico Ezequiel"}, {"codigo": "PE119", "nombre": "Lopez Pedro Antonio"}, {"codigo": "PE120", "nombre": "Losada Maria Celeste"}, {"codigo": "PE121", "nombre": "Losada Maria Fernanda"}, {"codigo": "PE122", "nombre": "Losada Maria Florencia"}, {"codigo": "PE123", "nombre": "Lozano Ruben Dario"}, {"codigo": "PE124", "nombre": "Lozano Inocencio"}, {"codigo": "PE125", "nombre": "Lujan Facundo Ariel"}, {"codigo": "PE126", "nombre": "Lujan Juliana Soledad"}, {"codigo": "PE127", "nombre": "Macellari Ileana Valentina"}, {"codigo": "PE128", "nombre": "Malino Maria Isabel"}, {"codigo": "PE129", "nombre": "Manterola Ubiria Diana Isabel"}, {"codigo": "PE130", "nombre": "Martinez Carla Natalia"}, {"codigo": "PE131", "nombre": "Martino Mariana"}, {"codigo": "PE132", "nombre": "Mendez Rosana Judith"}, {"codigo": "PE133", "nombre": "Merlo Mariela"}, {"codigo": "PE134", "nombre": "Michel Torino Cristina Del Milagro"}, {"codigo": "PE135", "nombre": "Misser Gitte Bjerring"}, {"codigo": "PE136", "nombre": "Mohamed Alejandro Martin"}, {"codigo": "PE137", "nombre": "Mohamed Pablo Sebastian"}, {"codigo": "PE138", "nombre": "Molfese Ivana"}, {"codigo": "PE139", "nombre": "Molfese Magali"}, {"codigo": "PE140", "nombre": "Monte Mariana"}, {"codigo": "PE141", "nombre": "Morales Florencia"}, {"codigo": "PE142", "nombre": "Morán Betina Leonor"}, {"codigo": "PE143", "nombre": "Morán Verónica"}, {"codigo": "PE144", "nombre": "Moriset Eugenia Maria"}, {"codigo": "PE145", "nombre": "Morisetti Natalia Ingrid"}, {"codigo": "PE146", "nombre": "Mungai Maria Mercedes Lucía"}, {"codigo": "PE147", "nombre": "Nuñez Daiana De Jesus"}, {"codigo": "PE148", "nombre": "Oliva Florencia Natalia"}, {"codigo": "PE149", "nombre": "Ordoñez Ruben Roberto"}, {"codigo": "PE150", "nombre": "Orlando Ana Ines"}, {"codigo": "PE151", "nombre": "Ortiz Agustina Ines"}, {"codigo": "PE152", "nombre": "Osorio Mariela Elisabet"}, {"codigo": "PE153", "nombre": "Pafundi Adrian Ezequiel"}, {"codigo": "PE154", "nombre": "Pandin Milagros"}, {"codigo": "PE155", "nombre": "Parraquini Paula"}, {"codigo": "PE156", "nombre": "Pedrosa Micaela"}, {"codigo": "PE157", "nombre": "Pendas Constanza"}, {"codigo": "PE158", "nombre": "Peraita Lorena"}, {"codigo": "PE159", "nombre": "Pereyra Claudia Ivone"}, {"codigo": "PE160", "nombre": "Pereyra Gisela Carolina"}, {"codigo": "PE161", "nombre": "Pereyra Piacquadio Maricel Sol"}, {"codigo": "PE162", "nombre": "Perez Ema Valeria"}, {"codigo": "PE163", "nombre": "Pesalaccia Valentin"}, {"codigo": "PE164", "nombre": "Pierini Norberto Alfredo"}, {"codigo": "PE165", "nombre": "Pizarro Etelvina Alejandra"}, {"codigo": "PE166", "nombre": "Pizarro María Fernanda"}, {"codigo": "PE167", "nombre": "Poulsen Hornum Geraldine"}, {"codigo": "PE168", "nombre": "Puhl Sofia"}, {"codigo": "PE169", "nombre": "Quevedo Brenda Elizabeth"}, {"codigo": "PE170", "nombre": "Ramos Omar Juan"}, {"codigo": "PE171", "nombre": "Ramos Marcos Ezequiel"}, {"codigo": "PE172", "nombre": "Regalia Silvina Paola"}, {"codigo": "PE173", "nombre": "Reynaud Daniela Victoria"}, {"codigo": "PE174", "nombre": "Rodera Maria Belen"}, {"codigo": "PE175", "nombre": "Rodriguez Agustina Belen"}, {"codigo": "PE176", "nombre": "Rodriguez Aldana Jimena"}, {"codigo": "PE177", "nombre": "Rodriguez Camila"}, {"codigo": "PE178", "nombre": "Rodriguez Gabriela Alejandra"}, {"codigo": "PE179", "nombre": "Rolon Maria Fernanda Del Lujan"}, {"codigo": "PE180", "nombre": "Rossi Diana Alejandra"}, {"codigo": "PE181", "nombre": "Rudolf Martina"}, {"codigo": "PE182", "nombre": "Ruso Miguel Angel"}, {"codigo": "PE183", "nombre": "Saez Maria Manuela"}, {"codigo": "PE184", "nombre": "Sagardoy Marcela Ines"}, {"codigo": "PE185", "nombre": "Saint Denis Lara Romina Isabel"}, {"codigo": "PE186", "nombre": "Salame Luciana"}, {"codigo": "PE187", "nombre": "Sanchez Julia"}, {"codigo": "PE188", "nombre": "Sanfeliú Nancy Elizabeth"}, {"codigo": "PE189", "nombre": "Sangermano Romero Michelle Ines"}, {"codigo": "PE190", "nombre": "Santiago Martina Andrea"}, {"codigo": "PE191", "nombre": "Scasso Guillermo Martin"}, {"codigo": "PE192", "nombre": "Segovia Martin Alejandro"}, {"codigo": "PE193", "nombre": "Suarez Diego Luciano"}, {"codigo": "PE194", "nombre": "Tambussi Mariano Alberto"}, {"codigo": "PE195", "nombre": "Taraborelli Camila"}, {"codigo": "PE196", "nombre": "Tassara Sergio Maximiliano"}, {"codigo": "PE197", "nombre": "Tellechea Maria Laura"}, {"codigo": "PE198", "nombre": "Teofilo Carolina Mabel"}, {"codigo": "PE199", "nombre": "Terlow Adriana Mabel"}, {"codigo": "PE200", "nombre": "Thygesen Francisco Ezequiel"}, {"codigo": "PE201", "nombre": "Toro Maria De Los Angeles"}, {"codigo": "PE202", "nombre": "Travaglia Silvano Leonel"}, {"codigo": "PE203", "nombre": "Tribiño Thomas Maria Celina"}, {"codigo": "PE204", "nombre": "Urbieta Manuela"}, {"codigo": "PE205", "nombre": "Urrutia Maria Isabel"}, {"codigo": "PE206", "nombre": "Valerio Vanesa"}, {"codigo": "PE207", "nombre": "Valladares Rucci Mariana"}, {"codigo": "PE208", "nombre": "Van Der Wekken Mariela Vanina"}, {"codigo": "PE209", "nombre": "Vandone Miguel Angel"}, {"codigo": "PE210", "nombre": "Vassolo Alejandro Jorge"}, {"codigo": "PE211", "nombre": "Velazquez Claudia Marcela"}, {"codigo": "PE212", "nombre": "Verkuyl Ivone Liliana"}, {"codigo": "PE213", "nombre": "Verkuyl Karina Mariel"}, {"codigo": "PE214", "nombre": "Vidal Diego"}, {"codigo": "PE215", "nombre": "Vidas Ferrario Manuela Triana"}, {"codigo": "PE216", "nombre": "Villoldo Mario Daniel"}, {"codigo": "PE217", "nombre": "Vivas Aldo Carlos"}, {"codigo": "PE218", "nombre": "Wehrhahne Jesica"}, {"codigo": "PE219", "nombre": "Wehrhahne Josefina"}, {"codigo": "PE220", "nombre": "Zubiaur Silvina Elizabeth"}, {"codigo": "PE221", "nombre": "Hernández Romina"}, {"codigo": "PE222", "nombre": "Molina Angeles"}, {"codigo": "PE223", "nombre": "Mónaco Facundo"}, {"codigo": "PE224", "nombre": "Angeles Molina (pasante)"}, {"codigo": "PE225", "nombre": "Sanchu Camila"}, {"codigo": "PR2-A-1", "nombre": "Acciardo Milo"}, {"codigo": "PR2-A-2", "nombre": "Arrechea Poy Manuel"}, {"codigo": "PR2-A-3", "nombre": "Barroero Atela Inés"}, {"codigo": "PR2-A-4", "nombre": "Bracco Rampoldi Felicitas"}, {"codigo": "PR2-A-5", "nombre": "Dam Erik"}, {"codigo": "PR2-A-6", "nombre": "Dam Olivia"}, {"codigo": "PR2-A-7", "nombre": "Duhau Ortega"}, {"codigo": "PR2-A-8", "nombre": "Expósito Catalina"}, {"codigo": "PR2-A-9", "nombre": "Ezcurra Fermín"}, {"codigo": "PR2-A-10", "nombre": "Fernández Martinez Francisco"}, {"codigo": "PR2-A-11", "nombre": "Gabilondo Lemble Greta"}, {"codigo": "PR2-A-12", "nombre": "Garat Rossi Román"}, {"codigo": "PR2-A-13", "nombre": "Gual Lorenzo"}, {"codigo": "PR2-A-14", "nombre": "Losada Pedrosa Matilda"}, {"codigo": "PR2-A-15", "nombre": "Marino Pedro"}, {"codigo": "PR2-A-16", "nombre": "Martínez Grisolia Simón"}, {"codigo": "PR2-A-17", "nombre": "Medawar Irigoyen Estanislao Cruz"}, {"codigo": "PR2-A-18", "nombre": "Mohamed Martina Inés"}, {"codigo": "PR2-A-19", "nombre": "Olery Constantino"}, {"codigo": "PR2-A-20", "nombre": "Ojeda Milia"}, {"codigo": "PR2-A-21", "nombre": "Okmaca Olleta Maite"}, {"codigo": "PR2-A-22", "nombre": "Orsili Luengo Agustín"}, {"codigo": "PR2-A-23", "nombre": "Podestá Francisco"}, {"codigo": "PR2-A-24", "nombre": "Tolaba Lola Magdalena"}, {"codigo": "PR2-A-25", "nombre": "Tribusón Aron"}, {"codigo": "PR2-A-26", "nombre": "Valls Joaquín"}, {"codigo": "PR2-A-27", "nombre": "Wehrhahne Helen"}, {"codigo": "PR2-B-1", "nombre": "Abascal Orlando Salvador"}, {"codigo": "PR2-B-2", "nombre": "Aranegui Fermín"}, {"codigo": "PR2-B-3", "nombre": "Arenzana Rodera Augusto"}, {"codigo": "PR2-B-4", "nombre": "Ballone Renzo"}, {"codigo": "PR2-B-5", "nombre": "Bianculli Sassola Valentino"}, {"codigo": "PR2-B-6", "nombre": "Crespi Bautista"}, {"codigo": "PR2-B-7", "nombre": "Daddario Catalina"}, {"codigo": "PR2-B-8", "nombre": "Degiuseppe Micaela"}, {"codigo": "PR2-B-9", "nombre": "Di Rocco Emilia"}, {"codigo": "PR2-B-10", "nombre": "Doglioli Gutierrez Maia"}, {"codigo": "PR2-B-11", "nombre": "Doglioli Sayas Bruno"}, {"codigo": "PR2-B-12", "nombre": "Fernandez Re Fausino"}, {"codigo": "PR2-B-13", "nombre": "Fjellerup Valentina"}, {"codigo": "PR2-B-14", "nombre": "Guzmán Juliana"}, {"codigo": "PR2-B-15", "nombre": "Iroulart Christensen Justina"}, {"codigo": "PR2-B-16", "nombre": "Liebaja Rodríguez Ceferino"}, {"codigo": "PR2-B-17", "nombre": "Marrodán Benicio"}, {"codigo": "PR2-B-18", "nombre": "Martínez Catalina"}, {"codigo": "PR2-B-19", "nombre": "Martínez Pedro"}, {"codigo": "PR2-B-20", "nombre": "Menna Bruno"}, {"codigo": "PR2-B-21", "nombre": "Orfanó Riobó Ana"}, {"codigo": "PR2-B-22", "nombre": "Pasch Facundo Aren"}, {"codigo": "PR2-B-23", "nombre": "Pasch Máximo Gunnard"}, {"codigo": "PR2-B-24", "nombre": "Perez Pieroni Leandro"}, {"codigo": "PR2-B-25", "nombre": "Rodríguez Emilia"}, {"codigo": "PR2-B-26", "nombre": "Rodríguez Mateo"}, {"codigo": "PR2-B-27", "nombre": "Sifuentes Liva Jazmín"}, {"codigo": "PR2-B-28", "nombre": "Zurita León"}, {"codigo": "PR2-C-1", "nombre": "Balbuena Felipe"}, {"codigo": "PR2-C-2", "nombre": "Balbuena Arribalzaga Justo"}, {"codigo": "PR2-C-3", "nombre": "Benitez Lola"}, {"codigo": "PR2-C-4", "nombre": "Blanck Ian"}, {"codigo": "PR2-C-5", "nombre": "Buczynski Antonieta Valentina"}, {"codigo": "PR2-C-6", "nombre": "Cisneros Camilo"}, {"codigo": "PR2-C-7", "nombre": "Cordoba Emilia"}, {"codigo": "PR2-C-8", "nombre": "Correa Garrahan Dharma"}, {"codigo": "PR2-C-9", "nombre": "Cortese López Joaquín"}, {"codigo": "PR2-C-10", "nombre": "Difonzo Antonia"}, {"codigo": "PR2-C-11", "nombre": "Fuente Morales Catalina"}, {"codigo": "PR2-C-12", "nombre": "Gigena Luz"}, {"codigo": "PR2-C-13", "nombre": "Gimenez Doladé Joaquín"}, {"codigo": "PR2-C-14", "nombre": "Goizueta Blanco Renata"}, {"codigo": "PR2-C-15", "nombre": "Lozano Baltazar"}, {"codigo": "PR2-C-16", "nombre": "Mallman Llorente Helena"}, {"codigo": "PR2-C-17", "nombre": "Milanesio Ciro"}, {"codigo": "PR2-C-18", "nombre": "Morera Lazarte Bautista"}, {"codigo": "PR2-C-19", "nombre": "Ochandio Benjamín"}, {"codigo": "PR2-C-20", "nombre": "Pannella Gonzalez Olivia"}, {"codigo": "PR2-C-21", "nombre": "Pericolo Gianella"}, {"codigo": "PR2-C-22", "nombre": "Pidal Fausto"}, {"codigo": "PR2-C-23", "nombre": "Rodera Santino"}, {"codigo": "PR2-C-24", "nombre": "Rodriguez Camilo"}, {"codigo": "PR2-C-25", "nombre": "Salaberry Julian"}, {"codigo": "PR2-C-26", "nombre": "Tapia Dominguez Beltran"}, {"codigo": "PR2-C-27", "nombre": "Tomaselli Camila"}, {"codigo": "PR2-C-28", "nombre": "Vizzolini Rosario"}, {"codigo": "PR3-A-1", "nombre": "Amaya Agustín"}, {"codigo": "PR3-A-2", "nombre": "Arduini Jazmín"}, {"codigo": "PR3-A-3", "nombre": "Arzoz Santino"}, {"codigo": "PR3-A-4", "nombre": "Barrionuevo Noah Felipe"}, {"codigo": "PR3-A-5", "nombre": "Berrutti Guadalupe"}, {"codigo": "PR3-A-6", "nombre": "Blanco Justina"}, {"codigo": "PR3-A-7", "nombre": "Bruzzese Marinetti Eugenio"}, {"codigo": "PR3-A-8", "nombre": "Cansado Juana"}, {"codigo": "PR3-A-9", "nombre": "Díaz Balbuena Camila"}, {"codigo": "PR3-A-10", "nombre": "Echevarría Luz"}, {"codigo": "PR3-A-11", "nombre": "Fernández Martínez Martín"}, {"codigo": "PR3-A-12", "nombre": "Ferraro Corral Francesca"}, {"codigo": "PR3-A-13", "nombre": "Gandolfi Garcia Nahuel Atahualpa"}, {"codigo": "PR3-A-14", "nombre": "Garcia Juan Patricio"}, {"codigo": "PR3-A-15", "nombre": "Giordani Valentino"}, {"codigo": "PR3-A-16", "nombre": "Goicoechea Felipe"}, {"codigo": "PR3-A-17", "nombre": "Gonzalez Delfina"}, {"codigo": "PR3-A-18", "nombre": "Martinez Sacco Constanza"}, {"codigo": "PR3-A-19", "nombre": "Mazzitelli Francesca"}, {"codigo": "PR3-A-20", "nombre": "Moreno Benicio"}, {"codigo": "PR3-A-21", "nombre": "Palla Rodríguez Antonio"}, {"codigo": "PR3-A-22", "nombre": "Samaniego Facundo"}, {"codigo": "PR3-A-23", "nombre": "Schiuma Bautista Genaro"}, {"codigo": "PR3-A-24", "nombre": "Sommariva Emma"}, {"codigo": "PR3-A-25", "nombre": "Tello Benjamín"}, {"codigo": "PR3-A-26", "nombre": "Tormes Joaquín"}, {"codigo": "PR3-A-27", "nombre": "Valladares Ernestina"}, {"codigo": "PR3-A-28", "nombre": "Vivas Delfina"}, {"codigo": "PR3-A-29", "nombre": "Zárate Yane Bautista"}, {"codigo": "PR3-A-30", "nombre": "Zubillaga Nazli Martina"}, {"codigo": "PR3-B-1", "nombre": "Ambrosius Cepeda Maria Emilia"}, {"codigo": "PR3-B-2", "nombre": "Barragán León"}, {"codigo": "PR3-B-3", "nombre": "Borcano Ciro"}, {"codigo": "PR3-B-4", "nombre": "Buffa Esmeralda"}, {"codigo": "PR3-B-5", "nombre": "Cazalas Ana"}, {"codigo": "PR3-B-6", "nombre": "Defferrari Juana"}, {"codigo": "PR3-B-7", "nombre": "Echevarria Mateo"}, {"codigo": "PR3-B-8", "nombre": "Echevarría Angela"}, {"codigo": "PR3-B-9", "nombre": "Errazu Sofía"}, {"codigo": "PR3-B-10", "nombre": "Fernandez Martinez Agustín"}, {"codigo": "PR3-B-11", "nombre": "Ferreyra Julia"}, {"codigo": "PR3-B-12", "nombre": "Gastelu Margarita"}, {"codigo": "PR3-B-13", "nombre": "Grondona Felipe"}, {"codigo": "PR3-B-14", "nombre": "Guerrero Alfonsina"}, {"codigo": "PR3-B-15", "nombre": "Gurruchaga Moreno Manuel"}, {"codigo": "PR3-B-16", "nombre": "Lance Inés"}, {"codigo": "PR3-B-17", "nombre": "Louzao Sara"}, {"codigo": "PR3-B-18", "nombre": "Moreno Alfonso"}, {"codigo": "PR3-B-19", "nombre": "O'Lery Joaquina"}, {"codigo": "PR3-B-20", "nombre": "Ogallar Margarita"}, {"codigo": "PR3-B-21", "nombre": "Over Josefina"}, {"codigo": "PR3-B-22", "nombre": "Pascual Facundo"}, {"codigo": "PR3-B-23", "nombre": "Petronio Echarry Nina"}, {"codigo": "PR3-B-24", "nombre": "Rubio Pilar"}, {"codigo": "PR3-B-25", "nombre": "Sarasqueta Maite"}, {"codigo": "PR3-B-26", "nombre": "Sode Faustino"}, {"codigo": "PR3-B-27", "nombre": "Suarez Manterola Agustín"}, {"codigo": "PR3-B-28", "nombre": "Tellmann Lucía"}, {"codigo": "PR3-B-29", "nombre": "Urbina Ridino Pedro Luis"}, {"codigo": "PR3-B-30", "nombre": "Vazquez Giménez Uma"}, {"codigo": "PR3-C-1", "nombre": "Alvarez Héctor"}, {"codigo": "PR3-C-2", "nombre": "Cantera René"}, {"codigo": "PR3-C-3", "nombre": "Casablanca Imanol"}, {"codigo": "PR3-C-4", "nombre": "Chico Fermín"}, {"codigo": "PR3-C-5", "nombre": "Cuello Ballerini Indiana Amancay"}, {"codigo": "PR3-C-6", "nombre": "Di Stéfano Mateo"}, {"codigo": "PR3-C-7", "nombre": "Di Vincenzo Bruno"}, {"codigo": "PR3-C-8", "nombre": "Draghi Misser Björn"}, {"codigo": "PR3-C-9", "nombre": "Ghio Genaro"}, {"codigo": "PR3-C-10", "nombre": "Gigon Teo"}, {"codigo": "PR3-C-11", "nombre": "Gimenez Blanco Cruz"}, {"codigo": "PR3-C-12", "nombre": "Godoy Lucía"}, {"codigo": "PR3-C-13", "nombre": "Gonzalez Aristegui Juana"}, {"codigo": "PR3-C-14", "nombre": "Lachat Lucía"}, {"codigo": "PR3-C-15", "nombre": "Laplaza Catalina"}, {"codigo": "PR3-C-16", "nombre": "Legarreta Molina Valentino"}, {"codigo": "PR3-C-17", "nombre": "Luquez Ortega Juan Pablo"}, {"codigo": "PR3-C-18", "nombre": "Mariani Salvador"}, {"codigo": "PR3-C-19", "nombre": "Martínez Ulises"}, {"codigo": "PR3-C-20", "nombre": "Nguyen Dalinger Camila"}, {"codigo": "PR3-C-21", "nombre": "Osorio León Emanuel"}, {"codigo": "PR3-C-22", "nombre": "Pereyra Luca"}, {"codigo": "PR3-C-23", "nombre": "Ramos Felipe Nahitan"}, {"codigo": "PR3-C-24", "nombre": "Roteta Caleb"}, {"codigo": "PR3-C-25", "nombre": "Sigoli Oriana"}, {"codigo": "PR3-C-26", "nombre": "Taboada Benjamín"}, {"codigo": "PR3-C-27", "nombre": "Vilches Salvador"}, {"codigo": "PR3-C-28", "nombre": "Villamarzo Larriestra Benjamín"}, {"codigo": "PR4-A-1", "nombre": "Alarcón Osorio Ignacio"}, {"codigo": "PR4-A-2", "nombre": "Atela Helena"}, {"codigo": "PR4-A-3", "nombre": "Bailac Gabriel Bautista"}, {"codigo": "PR4-A-4", "nombre": "Ballestero Luna"}, {"codigo": "PR4-A-5", "nombre": "Barrionuevo Ghio Alejo"}, {"codigo": "PR4-A-6", "nombre": "Berti Osorio Lucía"}, {"codigo": "PR4-A-7", "nombre": "Bonifacio De Cicco Amalia"}, {"codigo": "PR4-A-8", "nombre": "Carranza Suarez Miqueas"}, {"codigo": "PR4-A-9", "nombre": "Chimenti Martina"}, {"codigo": "PR4-A-10", "nombre": "Crespi Gino"}, {"codigo": "PR4-A-11", "nombre": "De Benedetto Mungai Juana"}, {"codigo": "PR4-A-12", "nombre": "Diego Renata"}, {"codigo": "PR4-A-13", "nombre": "Fernández Alonso Fermín"}, {"codigo": "PR4-A-14", "nombre": "Ganim Gino"}, {"codigo": "PR4-A-15", "nombre": "Guido Nai"}, {"codigo": "PR4-A-16", "nombre": "Hernández León"}, {"codigo": "PR4-A-17", "nombre": "Kreder Noah"}, {"codigo": "PR4-A-18", "nombre": "Larsen Erik"}, {"codigo": "PR4-A-19", "nombre": "Lovera Valentín"}, {"codigo": "PR4-A-20", "nombre": "Lúquez Delfina"}, {"codigo": "PR4-A-21", "nombre": "Matilla Martina"}, {"codigo": "PR4-A-22", "nombre": "Miranda Díaz Lucio"}, {"codigo": "PR4-A-23", "nombre": "Orfanó Riobó Ramón"}, {"codigo": "PR4-A-24", "nombre": "Riecke Risso Thomas"}, {"codigo": "PR4-A-25", "nombre": "Ross Gonzalez Ana Inés"}, {"codigo": "PR4-A-26", "nombre": "Saez Calderón Catalina"}, {"codigo": "PR4-A-27", "nombre": "Silvestre Amparo"}, {"codigo": "PR4-B-1", "nombre": "Alzueta Tomás"}, {"codigo": "PR4-B-2", "nombre": "Anaya Farisano Camilo"}, {"codigo": "PR4-B-3", "nombre": "Baratteri Gennaro"}, {"codigo": "PR4-B-4", "nombre": "Camejo Erramuspe Agustin"}, {"codigo": "PR4-B-5", "nombre": "Chacón Llopis Lola"}, {"codigo": "PR4-B-6", "nombre": "Chaulet Mía"}, {"codigo": "PR4-B-7", "nombre": "D'annunzio Martina"}, {"codigo": "PR4-B-8", "nombre": "D'atri Enzo"}, {"codigo": "PR4-B-9", "nombre": "De La Cal Giorgi Simón"}, {"codigo": "PR4-B-10", "nombre": "Doglioli Juliana"}, {"codigo": "PR4-B-11", "nombre": "Friederichs Emilia"}, {"codigo": "PR4-B-12", "nombre": "Friederichs Tomas"}, {"codigo": "PR4-B-13", "nombre": "Haedo Valdez Blas"}, {"codigo": "PR4-B-14", "nombre": "Herrera Santiago"}, {"codigo": "PR4-B-15", "nombre": "Laitan Saa Zoe Xiomara"}, {"codigo": "PR4-B-16", "nombre": "Latorre Iacoviello Delfina"}, {"codigo": "PR4-B-17", "nombre": "Mallmann Llorente Luisa"}, {"codigo": "PR4-B-18", "nombre": "Neira Siri Vicente"}, {"codigo": "PR4-B-19", "nombre": "Olsen Irene Lucía"}, {"codigo": "PR4-B-20", "nombre": "Petersen Margarita"}, {"codigo": "PR4-B-21", "nombre": "Porzio Juana"}, {"codigo": "PR4-B-22", "nombre": "Rodriguez Camila"}, {"codigo": "PR4-B-23", "nombre": "Saaby Felipe"}, {"codigo": "PR4-B-24", "nombre": "Saenz Rozas Ramón"}, {"codigo": "PR4-B-25", "nombre": "Satini Fermín"}, {"codigo": "PR4-B-26", "nombre": "Tolosa Antonia"}, {"codigo": "PR4-B-27", "nombre": "Tomaselli Liz"}, {"codigo": "PR4-B-28", "nombre": "Varela Lautaro"}, {"codigo": "PR4-C-1", "nombre": "Abelleira Camilo"}, {"codigo": "PR4-C-2", "nombre": "Abelleira Paz"}, {"codigo": "PR4-C-3", "nombre": "Aizpitarte Cattanio Juan Pedro"}, {"codigo": "PR4-C-4", "nombre": "Ballone Giovanna"}, {"codigo": "PR4-C-5", "nombre": "Bayón Olivia"}, {"codigo": "PR4-C-6", "nombre": "Bottino Bautista"}, {"codigo": "PR4-C-7", "nombre": "Bruno Amparo"}, {"codigo": "PR4-C-8", "nombre": "Cortadi Benjamín"}, {"codigo": "PR4-C-9", "nombre": "Di Rocco Juan Pedro"}, {"codigo": "PR4-C-10", "nombre": "Gigena Mateo"}, {"codigo": "PR4-C-11", "nombre": "Giménez Benicio"}, {"codigo": "PR4-C-12", "nombre": "Guerrero Pandín Tomás"}, {"codigo": "PR4-C-13", "nombre": "Laccedra Bustos Catalina Emma"}, {"codigo": "PR4-C-14", "nombre": "Lezcano Benjamín"}, {"codigo": "PR4-C-15", "nombre": "Lohidoy Pilar"}, {"codigo": "PR4-C-16", "nombre": "Matta Poulsen Amalia"}, {"codigo": "PR4-C-17", "nombre": "Montero Del Molino Agustín"}, {"codigo": "PR4-C-18", "nombre": "Orgambide Emilce"}, {"codigo": "PR4-C-19", "nombre": "Roqué Corral Catalina"}, {"codigo": "PR4-C-20", "nombre": "Saenz Rozas Clementina"}, {"codigo": "PR4-C-21", "nombre": "Salvai Octavio"}, {"codigo": "PR4-C-22", "nombre": "Vázquez Nicolás"}, {"codigo": "PR4-C-23", "nombre": "Vejrup Juan Cruz"}, {"codigo": "PR4-C-24", "nombre": "Vizzolini Inés"}, {"codigo": "PR5-A-1", "nombre": "Aguilera Fermín"}, {"codigo": "PR5-A-2", "nombre": "Attem Navarro Faustina"}, {"codigo": "PR5-A-3", "nombre": "Barreras Joaquina"}, {"codigo": "PR5-A-4", "nombre": "Bracco Milo Alfonso"}, {"codigo": "PR5-A-5", "nombre": "Cerna Mía Yasmin"}, {"codigo": "PR5-A-6", "nombre": "Chamús Gonzalez Agustin"}, {"codigo": "PR5-A-7", "nombre": "Colonna Pedro"}, {"codigo": "PR5-A-8", "nombre": "Contigiani Pedro"}, {"codigo": "PR5-A-9", "nombre": "De Los Ríos Correa Federica"}, {"codigo": "PR5-A-10", "nombre": "Di Croce Antonio"}, {"codigo": "PR5-A-11", "nombre": "Diego Lucas"}, {"codigo": "PR5-A-12", "nombre": "Doglioli Gutierrez Bautista"}, {"codigo": "PR5-A-13", "nombre": "Expósito Guadalupe Isabel"}, {"codigo": "PR5-A-14", "nombre": "Fuentes Renaud Pedro"}, {"codigo": "PR5-A-15", "nombre": "Fusaro Pallavicini Gino"}, {"codigo": "PR5-A-16", "nombre": "Houriet Santino"}, {"codigo": "PR5-A-17", "nombre": "Jorgensen Lucia"}, {"codigo": "PR5-A-18", "nombre": "Kain Lopez Amanda"}, {"codigo": "PR5-A-19", "nombre": "Knudsen Alex"}, {"codigo": "PR5-A-20", "nombre": "Laplace Milo"}, {"codigo": "PR5-A-21", "nombre": "Larsen Ludvig"}, {"codigo": "PR5-A-22", "nombre": "Manso Santiago"}, {"codigo": "PR5-A-23", "nombre": "Maté D'Annunzio Inés"}, {"codigo": "PR5-A-24", "nombre": "Menna Aaron"}, {"codigo": "PR5-A-25", "nombre": "Molina Florencia"}, {"codigo": "PR5-A-26", "nombre": "Moreno Vicente"}, {"codigo": "PR5-A-27", "nombre": "Pidal Manuel"}, {"codigo": "PR5-A-28", "nombre": "Pintos Fermín"}, {"codigo": "PR5-A-29", "nombre": "Poulsen Hornum Tomás"}, {"codigo": "PR5-A-30", "nombre": "Torraca Regert Jesús Mateo"}, {"codigo": "PR5-A-31", "nombre": "Ucci Dante"}, {"codigo": "PR5-B-1", "nombre": "Aguinaga Luna"}, {"codigo": "PR5-B-2", "nombre": "Bonifacio Bustos Ignacio"}, {"codigo": "PR5-B-3", "nombre": "Cansado Elena"}, {"codigo": "PR5-B-4", "nombre": "Concha Fuentes Sara"}, {"codigo": "PR5-B-5", "nombre": "Correa Garrahan Minerva"}, {"codigo": "PR5-B-6", "nombre": "Dalla Zanna Lucio"}, {"codigo": "PR5-B-7", "nombre": "Echevarría Ambrosius Iker"}, {"codigo": "PR5-B-8", "nombre": "Frau Bautista"}, {"codigo": "PR5-B-9", "nombre": "Garate Baltazar"}, {"codigo": "PR5-B-10", "nombre": "Garcia Alfonso"}, {"codigo": "PR5-B-11", "nombre": "Gigon Manuel"}, {"codigo": "PR5-B-12", "nombre": "Gimenez Barragan Delfina"}, {"codigo": "PR5-B-13", "nombre": "Gomez Groenenberg Juana"}, {"codigo": "PR5-B-14", "nombre": "Molina Lucio"}, {"codigo": "PR5-B-15", "nombre": "Mujica Thiago David"}, {"codigo": "PR5-B-16", "nombre": "Naab Nicandro Tomás"}, {"codigo": "PR5-B-17", "nombre": "Perretti Camilo"}, {"codigo": "PR5-B-18", "nombre": "Petrelli Juan Manuel"}, {"codigo": "PR5-B-19", "nombre": "Petronio Echarry Vito"}, {"codigo": "PR5-B-20", "nombre": "Rodriguez García Lucía"}, {"codigo": "PR5-B-21", "nombre": "Rodríguez López Nina"}, {"codigo": "PR5-B-22", "nombre": "Ruiz Danna"}, {"codigo": "PR5-B-23", "nombre": "Saenz Rozas Justo"}, {"codigo": "PR5-B-24", "nombre": "Segundo Pizarro Melany Ailin"}, {"codigo": "PR5-B-25", "nombre": "Tassara Alvaro"}, {"codigo": "PR5-B-26", "nombre": "Tomalino Erik Arnaldo"}, {"codigo": "PR5-B-27", "nombre": "Topete Dulce"}, {"codigo": "PR5-B-28", "nombre": "Trenco Felipe"}, {"codigo": "PR5-B-29", "nombre": "Ugalde Olivia"}, {"codigo": "PR5-C-1", "nombre": "Balbuena Arribalzaga Mara"}, {"codigo": "PR5-C-2", "nombre": "Becaluba Cipriano"}, {"codigo": "PR5-C-3", "nombre": "Buzzi Basualdo Renata"}, {"codigo": "PR5-C-4", "nombre": "Cortese López Felipe"}, {"codigo": "PR5-C-5", "nombre": "Cuello Ballerini Tobías Nehuen"}, {"codigo": "PR5-C-6", "nombre": "Dam Salvador"}, {"codigo": "PR5-C-7", "nombre": "De Cicco Blas"}, {"codigo": "PR5-C-8", "nombre": "Degiuseppe Isabella"}, {"codigo": "PR5-C-9", "nombre": "Fernandez Re Catalina"}, {"codigo": "PR5-C-10", "nombre": "García Paloma"}, {"codigo": "PR5-C-11", "nombre": "Gejo Paredero Lourdes Pilar"}, {"codigo": "PR5-C-12", "nombre": "Gentile Faustino"}, {"codigo": "PR5-C-13", "nombre": "Gerónimo Catalina"}, {"codigo": "PR5-C-14", "nombre": "Giancaterino Hoffmann Francesco"}, {"codigo": "PR5-C-15", "nombre": "Martinez Grisolia Juan Bautista"}, {"codigo": "PR5-C-16", "nombre": "Marzona Lucía"}, {"codigo": "PR5-C-17", "nombre": "Medawar Irigoyen Donato Salvador"}, {"codigo": "PR5-C-18", "nombre": "O'lery Pedro"}, {"codigo": "PR5-C-19", "nombre": "Ordoqui Isidro"}, {"codigo": "PR5-C-20", "nombre": "Piloni Salvador"}, {"codigo": "PR5-C-21", "nombre": "Pucheta Fosque Evangelina"}, {"codigo": "PR5-C-22", "nombre": "Ramón Sabina"}, {"codigo": "PR5-C-23", "nombre": "Roché Benjamín"}, {"codigo": "PR5-C-24", "nombre": "Rodriguez Morisetti Agustin"}, {"codigo": "PR5-C-25", "nombre": "Rodriguez Ouwerkerk Olivia"}, {"codigo": "PR5-C-26", "nombre": "Romano Roldan Ludgarda"}, {"codigo": "PR5-C-27", "nombre": "Ruiz Emilia"}, {"codigo": "PR5-C-28", "nombre": "Sanchez Eva"}, {"codigo": "PR5-C-29", "nombre": "Saucedo Valentino"}, {"codigo": "PR5-C-30", "nombre": "Tormes Delfina"}, {"codigo": "PR5-C-31", "nombre": "Vassolo Russo Salvador"}, {"codigo": "PR6-A-1", "nombre": "Blanco Malena"}, {"codigo": "PR6-A-2", "nombre": "Campanini Simón"}, {"codigo": "PR6-A-3", "nombre": "Cantera Juliana"}, {"codigo": "PR6-A-4", "nombre": "Dannunzio Gino"}, {"codigo": "PR6-A-5", "nombre": "Di Salvo Facundo"}, {"codigo": "PR6-A-6", "nombre": "Espeluse Florencio Beltran"}, {"codigo": "PR6-A-7", "nombre": "Fernandez Enzo"}, {"codigo": "PR6-A-8", "nombre": "Garcia Faustino"}, {"codigo": "PR6-A-9", "nombre": "Griffioen Isabella Victoria"}, {"codigo": "PR6-A-10", "nombre": "Gutiérrez Mia Julieta"}, {"codigo": "PR6-A-11", "nombre": "Lazzaro Taraborelli Francesca"}, {"codigo": "PR6-A-12", "nombre": "Leguizamón Llopis Violeta"}, {"codigo": "PR6-A-13", "nombre": "Lemme Blas"}, {"codigo": "PR6-A-14", "nombre": "Lorenzo Álvaro"}, {"codigo": "PR6-A-15", "nombre": "Lucero Kees Galo André"}, {"codigo": "PR6-A-16", "nombre": "Magistrelli Correa Lautaro"}, {"codigo": "PR6-A-17", "nombre": "Martino Helena"}, {"codigo": "PR6-A-18", "nombre": "Mendoza Gabriel"}, {"codigo": "PR6-A-19", "nombre": "Nemet Martin Antonio"}, {"codigo": "PR6-A-20", "nombre": "Ordoqui Simona"}, {"codigo": "PR6-A-21", "nombre": "Perez Benavente Iara"}, {"codigo": "PR6-A-22", "nombre": "Rodriguez Bigliardi Martina"}, {"codigo": "PR6-A-23", "nombre": "Sommariva Bruno"}, {"codigo": "PR6-A-24", "nombre": "Velarde Felipe"}, {"codigo": "PR6-A-25", "nombre": "Zamora Felicitas"}, {"codigo": "PR6-A-26", "nombre": "Zangoni Stefano"}, {"codigo": "PR6-B-1", "nombre": "Aizpitarte Cattanio Salvador"}, {"codigo": "PR6-B-2", "nombre": "Appella Maria Emilia"}, {"codigo": "PR6-B-3", "nombre": "Borcano Mateo"}, {"codigo": "PR6-B-4", "nombre": "Capuzzi Juana"}, {"codigo": "PR6-B-5", "nombre": "Christensen Rufino"}, {"codigo": "PR6-B-6", "nombre": "Chuburu Ana"}, {"codigo": "PR6-B-7", "nombre": "Dam Ceriani Ivo José"}, {"codigo": "PR6-B-8", "nombre": "Espelet Dionisio"}, {"codigo": "PR6-B-9", "nombre": "Ferrari Joaquina"}, {"codigo": "PR6-B-10", "nombre": "Ford Swaels Emilia"}, {"codigo": "PR6-B-11", "nombre": "García Delfina"}, {"codigo": "PR6-B-12", "nombre": "Gastelu Rosario"}, {"codigo": "PR6-B-13", "nombre": "Jensen Paolino Agustin Emanuel"}, {"codigo": "PR6-B-14", "nombre": "Jensen Paolino Victoria Malena"}, {"codigo": "PR6-B-15", "nombre": "Mc Coubrey Emma"}, {"codigo": "PR6-B-16", "nombre": "Menna Mateo Gael"}, {"codigo": "PR6-B-17", "nombre": "Palmieri Lucas"}, {"codigo": "PR6-B-18", "nombre": "Perez Pieroni Pedro"}, {"codigo": "PR6-B-19", "nombre": "Prado Juan Bautista"}, {"codigo": "PR6-B-20", "nombre": "Riobó Eloisa"}, {"codigo": "PR6-B-21", "nombre": "Ruso Gonzalo"}, {"codigo": "PR6-B-22", "nombre": "Scampini Fermin"}, {"codigo": "PR6-B-23", "nombre": "Trevolazavala Benjamin"}, {"codigo": "PR6-B-24", "nombre": "Udaondo Justo"}, {"codigo": "PR6-B-25", "nombre": "Ulibarre Juana"}, {"codigo": "PR6-B-26", "nombre": "Vejrup Felicitas"}, {"codigo": "PR6-B-27", "nombre": "Zijlstra Juana"}, {"codigo": "PR6-C-1", "nombre": "Alvarado Amaia"}, {"codigo": "PR6-C-2", "nombre": "Araneta Isabella"}, {"codigo": "PR6-C-3", "nombre": "Attema Ambar"}, {"codigo": "PR6-C-4", "nombre": "Aversa Caprile Isabel"}, {"codigo": "PR6-C-5", "nombre": "Carioni Lofiego Fermín"}, {"codigo": "PR6-C-6", "nombre": "Di Croce Olivia"}, {"codigo": "PR6-C-7", "nombre": "Duguine Ignacio"}, {"codigo": "PR6-C-8", "nombre": "Duran Alvarez Olivia"}, {"codigo": "PR6-C-9", "nombre": "Elizaga Elena"}, {"codigo": "PR6-C-10", "nombre": "Gandara Borda Luca"}, {"codigo": "PR6-C-11", "nombre": "Lopez Di Benedetto Juan Cruz"}, {"codigo": "PR6-C-12", "nombre": "Mesa Jonás"}, {"codigo": "PR6-C-13", "nombre": "O'Lery Lucio"}, {"codigo": "PR6-C-14", "nombre": "Ojeda Maite"}, {"codigo": "PR6-C-15", "nombre": "Ottonello Barreda Mora"}, {"codigo": "PR6-C-16", "nombre": "Prátula Simón"}, {"codigo": "PR6-C-17", "nombre": "Pueblas Genaro Antonio"}, {"codigo": "PR6-C-18", "nombre": "Queipo Zaballa Manuel"}, {"codigo": "PR6-C-19", "nombre": "Rodriguez Benjamin"}, {"codigo": "PR6-C-20", "nombre": "Rodriguez Garcimuño Lautaro"}, {"codigo": "PR6-C-21", "nombre": "Rubio Benjamín"}, {"codigo": "PR6-C-22", "nombre": "Sabatini Marco"}, {"codigo": "PR6-C-23", "nombre": "Sabattini Dante"}, {"codigo": "PR6-C-24", "nombre": "Simonetti Trinidad"}, {"codigo": "PR6-C-25", "nombre": "Sode Cristaldo Indiana"}, {"codigo": "PR6-C-26", "nombre": "Varela García Giovanni"}, {"codigo": "PR6-C-27", "nombre": "Vázquez Tomás"}, {"codigo": "PR1-A-1", "nombre": ""}, {"codigo": "PR1-A-2", "nombre": ""}, {"codigo": "PR1-A-3", "nombre": ""}, {"codigo": "PR1-A-4", "nombre": ""}, {"codigo": "PR1-A-5", "nombre": ""}, {"codigo": "PR1-A-6", "nombre": ""}, {"codigo": "PR1-A-7", "nombre": ""}, {"codigo": "PR1-A-8", "nombre": ""}, {"codigo": "PR1-A-9", "nombre": ""}, {"codigo": "PR1-A-10", "nombre": ""}, {"codigo": "PR1-A-11", "nombre": ""}, {"codigo": "PR1-A-12", "nombre": ""}, {"codigo": "PR1-A-13", "nombre": ""}, {"codigo": "PR1-A-14", "nombre": ""}, {"codigo": "PR1-A-15", "nombre": ""}, {"codigo": "PR1-A-16", "nombre": ""}, {"codigo": "PR1-A-17", "nombre": ""}, {"codigo": "PR1-A-18", "nombre": ""}, {"codigo": "PR1-A-19", "nombre": ""}, {"codigo": "PR1-A-20", "nombre": ""}, {"codigo": "PR1-A-21", "nombre": ""}, {"codigo": "PR1-A-22", "nombre": ""}, {"codigo": "PR1-A-23", "nombre": ""}, {"codigo": "PR1-A-24", "nombre": ""}, {"codigo": "PR1-A-25", "nombre": ""}, {"codigo": "PR1-A-26", "nombre": ""}, {"codigo": "PR1-A-27", "nombre": ""}, {"codigo": "PR1-A-28", "nombre": ""}, {"codigo": "PR1-A-29", "nombre": ""}, {"codigo": "PR1-A-30", "nombre": ""}, {"codigo": "PR1-B-1", "nombre": ""}, {"codigo": "PR1-B-2", "nombre": ""}, {"codigo": "PR1-B-3", "nombre": ""}, {"codigo": "PR1-B-4", "nombre": ""}, {"codigo": "PR1-B-5", "nombre": ""}, {"codigo": "PR1-B-6", "nombre": ""}, {"codigo": "PR1-B-7", "nombre": ""}, {"codigo": "PR1-B-8", "nombre": ""}, {"codigo": "PR1-B-9", "nombre": ""}, {"codigo": "PR1-B-10", "nombre": ""}, {"codigo": "PR1-B-11", "nombre": ""}, {"codigo": "PR1-B-12", "nombre": ""}, {"codigo": "PR1-B-13", "nombre": ""}, {"codigo": "PR1-B-14", "nombre": ""}, {"codigo": "PR1-B-15", "nombre": ""}, {"codigo": "PR1-B-16", "nombre": ""}, {"codigo": "PR1-B-17", "nombre": ""}, {"codigo": "PR1-B-18", "nombre": ""}, {"codigo": "PR1-B-19", "nombre": ""}, {"codigo": "PR1-B-20", "nombre": ""}, {"codigo": "PR1-B-21", "nombre": ""}, {"codigo": "PR1-B-22", "nombre": ""}, {"codigo": "PR1-B-23", "nombre": ""}, {"codigo": "PR1-B-24", "nombre": ""}, {"codigo": "PR1-B-25", "nombre": ""}, {"codigo": "PR1-B-26", "nombre": ""}, {"codigo": "PR1-B-27", "nombre": ""}, {"codigo": "PR1-B-28", "nombre": ""}, {"codigo": "PR1-B-29", "nombre": ""}, {"codigo": "PR1-B-30", "nombre": ""}, {"codigo": "PR1-C-1", "nombre": ""}, {"codigo": "PR1-C-2", "nombre": ""}, {"codigo": "PR1-C-3", "nombre": ""}, {"codigo": "PR1-C-4", "nombre": ""}, {"codigo": "PR1-C-5", "nombre": ""}, {"codigo": "PR1-C-6", "nombre": ""}, {"codigo": "PR1-C-7", "nombre": ""}, {"codigo": "PR1-C-8", "nombre": ""}, {"codigo": "PR1-C-9", "nombre": ""}, {"codigo": "PR1-C-10", "nombre": ""}, {"codigo": "PR1-C-11", "nombre": ""}, {"codigo": "PR1-C-12", "nombre": ""}, {"codigo": "PR1-C-13", "nombre": ""}, {"codigo": "PR1-C-14", "nombre": ""}, {"codigo": "PR1-C-15", "nombre": ""}, {"codigo": "PR1-C-16", "nombre": ""}, {"codigo": "PR1-C-17", "nombre": ""}, {"codigo": "PR1-C-18", "nombre": ""}, {"codigo": "PR1-C-19", "nombre": ""}, {"codigo": "PR1-C-20", "nombre": ""}, {"codigo": "PR1-C-21", "nombre": ""}, {"codigo": "PR1-C-22", "nombre": ""}, {"codigo": "PR1-C-23", "nombre": ""}, {"codigo": "PR1-C-24", "nombre": ""}, {"codigo": "PR1-C-25", "nombre": ""}, {"codigo": "PR1-C-26", "nombre": ""}, {"codigo": "PR1-C-27", "nombre": ""}, {"codigo": "PR1-C-28", "nombre": ""}, {"codigo": "SE-2-1-1", "nombre": "Alderete Pereyra Theo"}, {"codigo": "SE-2-1-2", "nombre": "Blanco Clemente"}, {"codigo": "SE-2-1-3", "nombre": "Brunelli Estanislao"}, {"codigo": "SE-2-1-4", "nombre": "Carioni Lofiego Paulina"}, {"codigo": "SE-2-1-5", "nombre": "Coelli Donato"}, {"codigo": "SE-2-1-6", "nombre": "Dello Russo Lara"}, {"codigo": "SE-2-1-7", "nombre": "Dominguez Amado Tomas Daniel"}, {"codigo": "SE-2-1-8", "nombre": "Dumrauf Storm Simón"}, {"codigo": "SE-2-1-9", "nombre": "Elizari Joaquín"}, {"codigo": "SE-2-1-10", "nombre": "Ferrari Genaro"}, {"codigo": "SE-2-1-11", "nombre": "Finocchio Sofía"}, {"codigo": "SE-2-1-12", "nombre": "Garcia Delfina"}, {"codigo": "SE-2-1-13", "nombre": "García Ramón Brunella"}, {"codigo": "SE-2-1-14", "nombre": "Geaunin Malena"}, {"codigo": "SE-2-1-15", "nombre": "Gimenez Santino"}, {"codigo": "SE-2-1-16", "nombre": "Gómez Vaskoboinik Santino"}, {"codigo": "SE-2-1-17", "nombre": "González Genovesi Isabella"}, {"codigo": "SE-2-1-18", "nombre": "Herrera Olivia Lupita"}, {"codigo": "SE-2-1-19", "nombre": "Houriet Lola"}, {"codigo": "SE-2-1-20", "nombre": "Ielmini Francesca"}, {"codigo": "SE-2-1-21", "nombre": "Labrunee Victoria Kimey"}, {"codigo": "SE-2-1-22", "nombre": "Larsen Álvaro"}, {"codigo": "SE-2-1-23", "nombre": "Leguizamón Galiano Ernestina"}, {"codigo": "SE-2-1-24", "nombre": "Moreno Valentino"}, {"codigo": "SE-2-1-25", "nombre": "Nemet Martin Lucas"}, {"codigo": "SE-2-1-26", "nombre": "Noguera Genaro Marino"}, {"codigo": "SE-2-1-27", "nombre": "Ojeda Aitor Iñaqui"}, {"codigo": "SE-2-1-28", "nombre": "Pascual Clara"}, {"codigo": "SE-2-1-29", "nombre": "Riobó Juana"}, {"codigo": "SE-2-1-30", "nombre": "Sode Cristaldo Bautista"}, {"codigo": "SE-2-1-31", "nombre": "Ucci Joaquín"}, {"codigo": "SE-2-2-1", "nombre": "Alzueta Violeta"}, {"codigo": "SE-2-2-2", "nombre": "Appella Bautista"}, {"codigo": "SE-2-2-3", "nombre": "Blanck Joel"}, {"codigo": "SE-2-2-4", "nombre": "Carranza Suarez Misael"}, {"codigo": "SE-2-2-5", "nombre": "Chedrese Guadalupe"}, {"codigo": "SE-2-2-6", "nombre": "Cortés Catalina Abril"}, {"codigo": "SE-2-2-7", "nombre": "De Vries Ibrahim Joel"}, {"codigo": "SE-2-2-8", "nombre": "Doñate Samuel"}, {"codigo": "SE-2-2-9", "nombre": "Funes Barrionuevo Emelina"}, {"codigo": "SE-2-2-10", "nombre": "Huici Felipe"}, {"codigo": "SE-2-2-11", "nombre": "Knudsen Mayra"}, {"codigo": "SE-2-2-12", "nombre": "Lazzaro Taraborelli Isabella"}, {"codigo": "SE-2-2-13", "nombre": "Lozano Mateo"}, {"codigo": "SE-2-2-14", "nombre": "Maumus Valentino"}, {"codigo": "SE-2-2-15", "nombre": "Nielsen Ignacio"}, {"codigo": "SE-2-2-16", "nombre": "Nielsen Julia"}, {"codigo": "SE-2-2-17", "nombre": "Ordoñez Santino"}, {"codigo": "SE-2-2-18", "nombre": "Pedersen Christen"}, {"codigo": "SE-2-2-19", "nombre": "Perez Benavente Santino"}, {"codigo": "SE-2-2-20", "nombre": "Roché Sara"}, {"codigo": "SE-2-2-21", "nombre": "Rodriguez Wendy Mía"}, {"codigo": "SE-2-2-22", "nombre": "Rodriguez Ouwerkerk Benjamin"}, {"codigo": "SE-2-2-23", "nombre": "Romero Ilzarve Dylan Benjmin"}, {"codigo": "SE-2-2-24", "nombre": "Romero Ilzarve Nayla Nicole"}, {"codigo": "SE-2-2-25", "nombre": "Ruiz Agustina"}, {"codigo": "SE-2-2-26", "nombre": "Salaberry Jonas"}, {"codigo": "SE-2-2-27", "nombre": "Suarez Pilar"}, {"codigo": "SE-2-2-28", "nombre": "Udaondo Iñaki"}, {"codigo": "SE-2-2-29", "nombre": "Valladares Rucci Juana"}, {"codigo": "SE-2-2-30", "nombre": "Velarde Benicio"}, {"codigo": "SE-2-2-31", "nombre": "Weinzettel Rodera Julia"}, {"codigo": "SE-2-3-1", "nombre": "Amaya Máximo Andres"}, {"codigo": "SE-2-3-2", "nombre": "Andreasen Benjamin"}, {"codigo": "SE-2-3-3", "nombre": "Auzmendiz Ciro Andrés"}, {"codigo": "SE-2-3-4", "nombre": "Barrionuevo Denisse"}, {"codigo": "SE-2-3-5", "nombre": "Benavidez Nielsen Lorenzo"}, {"codigo": "SE-2-3-6", "nombre": "Caso Julián"}, {"codigo": "SE-2-3-7", "nombre": "Catalano Mortati Ramiro"}, {"codigo": "SE-2-3-8", "nombre": "Cazeaux Lucía"}, {"codigo": "SE-2-3-9", "nombre": "Cerna Ticiano Gael"}, {"codigo": "SE-2-3-10", "nombre": "Dalla Zanna Vicente"}, {"codigo": "SE-2-3-11", "nombre": "De La Cal Ema"}, {"codigo": "SE-2-3-12", "nombre": "Dubini Amestoy Anna"}, {"codigo": "SE-2-3-13", "nombre": "Ford Sara"}, {"codigo": "SE-2-3-14", "nombre": "Ford Swaels Benjamín"}, {"codigo": "SE-2-3-15", "nombre": "Gavioli Violeta"}, {"codigo": "SE-2-3-16", "nombre": "Gentile Isabella"}, {"codigo": "SE-2-3-17", "nombre": "Halberg Renata"}, {"codigo": "SE-2-3-18", "nombre": "Laplace Malena"}, {"codigo": "SE-2-3-19", "nombre": "Larocca Tribiño Fidel"}, {"codigo": "SE-2-3-20", "nombre": "Morales Victoria"}, {"codigo": "SE-2-3-21", "nombre": "Morra Bellingeri Sofía"}, {"codigo": "SE-2-3-22", "nombre": "O'Lery Trinidad"}, {"codigo": "SE-2-3-23", "nombre": "Pedersen Gonzalo"}, {"codigo": "SE-2-3-24", "nombre": "Podestá Juan Cruz"}, {"codigo": "SE-2-3-25", "nombre": "Potente Nicolás Agustín"}, {"codigo": "SE-2-3-26", "nombre": "Poulsen Hornum Lucía"}, {"codigo": "SE-2-3-27", "nombre": "Robusto Juan Mateo"}, {"codigo": "SE-2-3-28", "nombre": "Saenz Rozas Belisario"}, {"codigo": "SE-2-3-29", "nombre": "Tellmann Juan Pedro"}, {"codigo": "SE-2-3-30", "nombre": "Zorrilla Justo"}, {"codigo": "SE-3-1-1", "nombre": "Becaluba Francisca"}, {"codigo": "SE-3-1-2", "nombre": "Brest Valentín Gabriel"}, {"codigo": "SE-3-1-3", "nombre": "Canosa Luna"}, {"codigo": "SE-3-1-4", "nombre": "Chuburu Manuel"}, {"codigo": "SE-3-1-5", "nombre": "Ciucci Tomás Silvestre"}, {"codigo": "SE-3-1-6", "nombre": "Colonna Emilia"}, {"codigo": "SE-3-1-7", "nombre": "De Blasis Joaquín"}, {"codigo": "SE-3-1-8", "nombre": "Espinosa Nahuel Miqueas"}, {"codigo": "SE-3-1-9", "nombre": "Folonier Juan Bautista"}, {"codigo": "SE-3-1-10", "nombre": "Garrido Vicente Manuel"}, {"codigo": "SE-3-1-11", "nombre": "Gerbaudo Bautista Ismael"}, {"codigo": "SE-3-1-12", "nombre": "Gonzalez Luna"}, {"codigo": "SE-3-1-13", "nombre": "Johannessen Fausto"}, {"codigo": "SE-3-1-14", "nombre": "Kyanka Genaro Nahuel"}, {"codigo": "SE-3-1-15", "nombre": "Manso Micaela"}, {"codigo": "SE-3-1-16", "nombre": "Mera Ailén"}, {"codigo": "SE-3-1-17", "nombre": "Palmieri Juanita"}, {"codigo": "SE-3-1-18", "nombre": "Perez Benavente Milton"}, {"codigo": "SE-3-1-19", "nombre": "Pillado Salim Joaquín"}, {"codigo": "SE-3-1-20", "nombre": "Prátula Brisa Eduviges"}, {"codigo": "SE-3-1-21", "nombre": "Rodríguez Garcimuño Julieta"}, {"codigo": "SE-3-1-22", "nombre": "Rodriguez Meroni Luz"}, {"codigo": "SE-3-1-23", "nombre": "Romano Inés"}, {"codigo": "SE-3-1-24", "nombre": "Ruiz Delfina"}, {"codigo": "SE-3-1-25", "nombre": "Scandroglio Giotta Francesca"}, {"codigo": "SE-3-1-26", "nombre": "Soriano Joaquina"}, {"codigo": "SE-3-2-1", "nombre": "Argüello Juana"}, {"codigo": "SE-3-2-2", "nombre": "Blanco Micaela"}, {"codigo": "SE-3-2-3", "nombre": "Bruzzese Marinetti Vicente"}, {"codigo": "SE-3-2-4", "nombre": "Casco Juan Hilario"}, {"codigo": "SE-3-2-5", "nombre": "Cuevas Jazmin Isabel"}, {"codigo": "SE-3-2-6", "nombre": "Di Virgilio Saldungaray Gino"}, {"codigo": "SE-3-2-7", "nombre": "Di Virgilio Saldungaray Nina"}, {"codigo": "SE-3-2-8", "nombre": "Elisiri Máximo"}, {"codigo": "SE-3-2-9", "nombre": "Espelet Manuela"}, {"codigo": "SE-3-2-10", "nombre": "Fernandez Luna Irina"}, {"codigo": "SE-3-2-11", "nombre": "Godoy Jazmín"}, {"codigo": "SE-3-2-12", "nombre": "Harispe Moriset Felipe"}, {"codigo": "SE-3-2-13", "nombre": "Kreff Pedro"}, {"codigo": "SE-3-2-14", "nombre": "Lopez Soutric Helena"}, {"codigo": "SE-3-2-15", "nombre": "Lucero Guadalupe"}, {"codigo": "SE-3-2-16", "nombre": "Mansilla González Ariana"}, {"codigo": "SE-3-2-17", "nombre": "Messerliano Danna"}, {"codigo": "SE-3-2-18", "nombre": "Moreno Ema"}, {"codigo": "SE-3-2-19", "nombre": "Morteyrú Ernestina"}, {"codigo": "SE-3-2-20", "nombre": "Parente Faustino"}, {"codigo": "SE-3-2-21", "nombre": "Pesalaccia Novillo Facundo"}, {"codigo": "SE-3-2-22", "nombre": "Petersen Agustín"}, {"codigo": "SE-3-2-23", "nombre": "Rodriguez Meroni Santiago"}, {"codigo": "SE-3-2-24", "nombre": "Thomas Sara"}, {"codigo": "SE-3-2-25", "nombre": "Udaondo Alfredo"}, {"codigo": "SE-3-2-26", "nombre": "Vassolo Gonzalo"}, {"codigo": "SE-3-2-27", "nombre": "Vázquez Felipe"}, {"codigo": "SE-3-2-28", "nombre": "Paguegui Sofia"}, {"codigo": "SE-3-3-1", "nombre": "Barbera Martina"}, {"codigo": "SE-3-3-2", "nombre": "Borcano Francesca"}, {"codigo": "SE-3-3-3", "nombre": "Cassataro Delfina"}, {"codigo": "SE-3-3-4", "nombre": "Castelao Orúe Juana"}, {"codigo": "SE-3-3-5", "nombre": "Castro Dante Valentino"}, {"codigo": "SE-3-3-6", "nombre": "Cernuda Bernardo"}, {"codigo": "SE-3-3-7", "nombre": "De Los Ríos Correa Simona"}, {"codigo": "SE-3-3-8", "nombre": "Desperés María Paz"}, {"codigo": "SE-3-3-9", "nombre": "Di Rocco Julieta"}, {"codigo": "SE-3-3-10", "nombre": "Elgart Felipe"}, {"codigo": "SE-3-3-11", "nombre": "Erdocia Mateo"}, {"codigo": "SE-3-3-12", "nombre": "Ferreyra Abigail"}, {"codigo": "SE-3-3-13", "nombre": "Gomez Helena"}, {"codigo": "SE-3-3-14", "nombre": "Jara Magin"}, {"codigo": "SE-3-3-15", "nombre": "Jensen Paolino Benjamín Nicolás"}, {"codigo": "SE-3-3-16", "nombre": "Jorgensen Angelina"}, {"codigo": "SE-3-3-17", "nombre": "Lance Lucía"}, {"codigo": "SE-3-3-18", "nombre": "Lorenzo Renata"}, {"codigo": "SE-3-3-19", "nombre": "Mariani García Simón"}, {"codigo": "SE-3-3-20", "nombre": "Mohamed María Yazmín"}, {"codigo": "SE-3-3-21", "nombre": "Olsen Francisco"}, {"codigo": "SE-3-3-22", "nombre": "Paolini Barrientos Catalina"}, {"codigo": "SE-3-3-23", "nombre": "Pellicciotta Plaza Juana"}, {"codigo": "SE-3-3-24", "nombre": "Petersen Lola"}, {"codigo": "SE-3-3-25", "nombre": "Porzio Benjamín"}, {"codigo": "SE-3-3-26", "nombre": "Rolón Dulce"}, {"codigo": "SE-3-3-27", "nombre": "Romero Ambar Agustina"}, {"codigo": "SE-3-3-28", "nombre": "Weinzettel Juana"}, {"codigo": "SE-4-1-1", "nombre": "Abregú Hakim"}, {"codigo": "SE-4-1-2", "nombre": "Bonifacio De Cicco Enzo"}, {"codigo": "SE-4-1-3", "nombre": "Casablanca Santino"}, {"codigo": "SE-4-1-4", "nombre": "Castelao Orue Catalina"}, {"codigo": "SE-4-1-5", "nombre": "Castro Bautista"}, {"codigo": "SE-4-1-6", "nombre": "Cirone Morena"}, {"codigo": "SE-4-1-7", "nombre": "Cortés Santino Guillermo"}, {"codigo": "SE-4-1-8", "nombre": "Di Croce Isabella"}, {"codigo": "SE-4-1-9", "nombre": "Dominguez Amado Lucía Ayelén"}, {"codigo": "SE-4-1-10", "nombre": "Elicalde Benjamín"}, {"codigo": "SE-4-1-11", "nombre": "Elizari Sofía"}, {"codigo": "SE-4-1-12", "nombre": "Fauze Tumini Agustina"}, {"codigo": "SE-4-1-13", "nombre": "Garancini Soto Hernán"}, {"codigo": "SE-4-1-14", "nombre": "Gonzalez Benjamin"}, {"codigo": "SE-4-1-15", "nombre": "Guerrero Martina"}, {"codigo": "SE-4-1-16", "nombre": "Jensen Fatima"}, {"codigo": "SE-4-1-17", "nombre": "Magistrelli Correa Lorenzo"}, {"codigo": "SE-4-1-18", "nombre": "Monte Manterola Indiana"}, {"codigo": "SE-4-1-19", "nombre": "Navarro Nahuel Ariel"}, {"codigo": "SE-4-1-20", "nombre": "Orlando Emma"}, {"codigo": "SE-4-1-21", "nombre": "Pedersen Pablo Simón"}, {"codigo": "SE-4-1-22", "nombre": "Perez Salim Santiago"}, {"codigo": "SE-4-1-23", "nombre": "Perticarari Antonio"}, {"codigo": "SE-4-1-24", "nombre": "Perticarari Lorenzo"}, {"codigo": "SE-4-1-25", "nombre": "Ramos Bianca"}, {"codigo": "SE-4-1-26", "nombre": "Rodriguez Garcia Mateo"}, {"codigo": "SE-4-1-27", "nombre": "Romano Pizarro Juan Martin"}, {"codigo": "SE-4-1-28", "nombre": "Topete Máximo"}, {"codigo": "SE-4-1-29", "nombre": "Traverso Brian"}, {"codigo": "SE-4-2-1", "nombre": "Aguilera Juana"}, {"codigo": "SE-4-2-2", "nombre": "Alonso Santiago"}, {"codigo": "SE-4-2-3", "nombre": "Alvarez Guadalupe Del Carmen"}, {"codigo": "SE-4-2-4", "nombre": "Ambrosius Julieta Sara"}, {"codigo": "SE-4-2-5", "nombre": "Anzarda Fermin"}, {"codigo": "SE-4-2-6", "nombre": "Baigorria Aylin"}, {"codigo": "SE-4-2-7", "nombre": "Baquedano Juan Cruz"}, {"codigo": "SE-4-2-8", "nombre": "Barragán Luz"}, {"codigo": "SE-4-2-9", "nombre": "Barrionuevo Valentina"}, {"codigo": "SE-4-2-10", "nombre": "Blanco Queipo Mateo Joel"}, {"codigo": "SE-4-2-11", "nombre": "Bruno Gianna Narela"}, {"codigo": "SE-4-2-12", "nombre": "Castro Manuel"}, {"codigo": "SE-4-2-13", "nombre": "Clerch Simón"}, {"codigo": "SE-4-2-14", "nombre": "Contigiani Juan Ignacio"}, {"codigo": "SE-4-2-15", "nombre": "De La Cal Damián"}, {"codigo": "SE-4-2-16", "nombre": "Doñate Fermín"}, {"codigo": "SE-4-2-17", "nombre": "Dufour Marcos"}, {"codigo": "SE-4-2-18", "nombre": "Garcia Leire"}, {"codigo": "SE-4-2-19", "nombre": "Gavioli Vicente"}, {"codigo": "SE-4-2-20", "nombre": "Lopez Roteta Manuel"}, {"codigo": "SE-4-2-21", "nombre": "Mendoza Alejo"}, {"codigo": "SE-4-2-22", "nombre": "Mohamed Aquino Lara Rocío"}, {"codigo": "SE-4-2-23", "nombre": "Over Catalina"}, {"codigo": "SE-4-2-24", "nombre": "Perruelo Gino"}, {"codigo": "SE-4-2-25", "nombre": "Quintana Di Loreto Francisco"}, {"codigo": "SE-4-2-26", "nombre": "Saenz Rozas María Del Pilar"}, {"codigo": "SE-4-2-27", "nombre": "Tellmann Clara"}, {"codigo": "SE-4-2-28", "nombre": "Tribiño Priscila"}, {"codigo": "SE-4-2-29", "nombre": "Tubía Ignacio"}, {"codigo": "SE-4-2-30", "nombre": "Weinzettel Rodera Clara"}, {"codigo": "SE-4-3-1", "nombre": "Anzarda Luana"}, {"codigo": "SE-4-3-2", "nombre": "Bracco Jano"}, {"codigo": "SE-4-3-3", "nombre": "Brüel Gonzalo"}, {"codigo": "SE-4-3-4", "nombre": "Bruzzese Franco"}, {"codigo": "SE-4-3-5", "nombre": "Bucci Felipe"}, {"codigo": "SE-4-3-6", "nombre": "Campanini Matías Nicolás"}, {"codigo": "SE-4-3-7", "nombre": "Castillo Valentina"}, {"codigo": "SE-4-3-8", "nombre": "Colonna Soldavini Gianfranco"}, {"codigo": "SE-4-3-9", "nombre": "Cuello Ballerini Gianluca Nicanor"}, {"codigo": "SE-4-3-10", "nombre": "Dalla Zanna Noé Germán"}, {"codigo": "SE-4-3-11", "nombre": "Echevarría Carrasco Francisco"}, {"codigo": "SE-4-3-12", "nombre": "Fernandez Ana"}, {"codigo": "SE-4-3-13", "nombre": "Fisch Máxima"}, {"codigo": "SE-4-3-14", "nombre": "Fusaro Pallavicini Maiten"}, {"codigo": "SE-4-3-15", "nombre": "Ganim Cristian"}, {"codigo": "SE-4-3-16", "nombre": "Ganim Sofia"}, {"codigo": "SE-4-3-17", "nombre": "Guisasola Pedro"}, {"codigo": "SE-4-3-18", "nombre": "Leguizamon Matias"}, {"codigo": "SE-4-3-19", "nombre": "Leza Mia"}, {"codigo": "SE-4-3-20", "nombre": "Martinez Felix"}, {"codigo": "SE-4-3-21", "nombre": "Mirasso Sofia"}, {"codigo": "SE-4-3-22", "nombre": "Molina Valentina"}, {"codigo": "SE-4-3-23", "nombre": "Monjes Gregorio Dylan"}, {"codigo": "SE-4-3-24", "nombre": "Moscarda Guadalupe"}, {"codigo": "SE-4-3-25", "nombre": "Nielsen Martín"}, {"codigo": "SE-4-3-26", "nombre": "Pasch Julieta"}, {"codigo": "SE-4-3-27", "nombre": "Quintas Oriana Celina"}, {"codigo": "SE-4-3-28", "nombre": "Rodriguez Julieta"}, {"codigo": "SE-4-3-29", "nombre": "Rodriguez Lauridsen Alexia Micaela"}, {"codigo": "SE-4-3-30", "nombre": "Roldan Fabricius Facundo"}, {"codigo": "SE-4-3-31", "nombre": "Vaca Segundo"}, {"codigo": "SE-5-CN-1", "nombre": "Aguirre Martina"}, {"codigo": "SE-5-CN-2", "nombre": "Altamiranda Rodriguez Malena"}, {"codigo": "SE-5-CN-3", "nombre": "Avalos Molver Matteo Alcides"}, {"codigo": "SE-5-CN-4", "nombre": "Banegas Martina"}, {"codigo": "SE-5-CN-5", "nombre": "Caligiuri Constanza Ayelén"}, {"codigo": "SE-5-CN-6", "nombre": "Carrera Cejas Martina"}, {"codigo": "SE-5-CN-7", "nombre": "Cazeaux Gonzalo"}, {"codigo": "SE-5-CN-8", "nombre": "Edelstein Arburua Francisco"}, {"codigo": "SE-5-CN-9", "nombre": "Feula Catalina"}, {"codigo": "SE-5-CN-10", "nombre": "Flores Alex Benjamin"}, {"codigo": "SE-5-CN-11", "nombre": "Funes Barrionuevo Giovanni"}, {"codigo": "SE-5-CN-12", "nombre": "Gimenez Doladé Malena"}, {"codigo": "SE-5-CN-13", "nombre": "Gorosito Pluis Paloma"}, {"codigo": "SE-5-CN-14", "nombre": "Herrera Agustín"}, {"codigo": "SE-5-CN-15", "nombre": "Mariani Garcia Candela"}, {"codigo": "SE-5-CN-16", "nombre": "Martinez Menna Nicolas"}, {"codigo": "SE-5-CN-17", "nombre": "Martinez Oliva Enzo"}, {"codigo": "SE-5-CN-18", "nombre": "Maumus Bautista"}, {"codigo": "SE-5-CN-19", "nombre": "Miolo Sofía Aylén"}, {"codigo": "SE-5-CN-20", "nombre": "Osorio Máximo Arturo"}, {"codigo": "SE-5-CN-21", "nombre": "Petersen Alex Nicolás"}, {"codigo": "SE-5-CN-22", "nombre": "Piccirillo Benicio Hernán"}, {"codigo": "SE-5-CN-23", "nombre": "Zijlstra Benicio"}, {"codigo": "SE-5-EA-1", "nombre": "Aiello Indiana"}, {"codigo": "SE-5-EA-2", "nombre": "Andreasen Indiana"}, {"codigo": "SE-5-EA-3", "nombre": "Argüello Manuel"}, {"codigo": "SE-5-EA-4", "nombre": "Arlan García María Pia"}, {"codigo": "SE-5-EA-5", "nombre": "Carranza Suarez Esmeralda Madelaine"}, {"codigo": "SE-5-EA-6", "nombre": "Caso Benjamin"}, {"codigo": "SE-5-EA-7", "nombre": "Castillo Nicolas"}, {"codigo": "SE-5-EA-8", "nombre": "Diez Simón"}, {"codigo": "SE-5-EA-9", "nombre": "Fuentes Renaud Clara"}, {"codigo": "SE-5-EA-10", "nombre": "Gonzalez Malena"}, {"codigo": "SE-5-EA-11", "nombre": "Gonzalez Genovesi Valentin"}, {"codigo": "SE-5-EA-12", "nombre": "Malaspina Alma"}, {"codigo": "SE-5-EA-13", "nombre": "Martinez Ribet Jazmín"}, {"codigo": "SE-5-EA-14", "nombre": "Mathisen Malena"}, {"codigo": "SE-5-EA-15", "nombre": "Naab Mía Del Luján"}, {"codigo": "SE-5-EA-16", "nombre": "Prado Tomas"}, {"codigo": "SE-5-EA-17", "nombre": "Roldan Fabricius Bernarda"}, {"codigo": "SE-5-EA-18", "nombre": "Ross Gonzalez Álvaro"}, {"codigo": "SE-5-EA-19", "nombre": "Sagardoy Juan Pedro"}, {"codigo": "SE-5-EA-20", "nombre": "Santini Genaro"}, {"codigo": "SE-5-EA-21", "nombre": "Tolosa Constanza"}, {"codigo": "SE-5-EA-22", "nombre": "Zorrilla María Paz"}, {"codigo": "SE-5-ESA-1", "nombre": "Alberca Benjamín Osmildo"}, {"codigo": "SE-5-ESA-2", "nombre": "Amuchategui Echeverria Nicolas"}, {"codigo": "SE-5-ESA-3", "nombre": "Appella Tiago"}, {"codigo": "SE-5-ESA-4", "nombre": "Astiz Manuela Sofia"}, {"codigo": "SE-5-ESA-5", "nombre": "Astrada Mia Selene"}, {"codigo": "SE-5-ESA-6", "nombre": "Blanck Lourdes Sara"}, {"codigo": "SE-5-ESA-7", "nombre": "Brown Octavio Benjamin"}, {"codigo": "SE-5-ESA-8", "nombre": "Capuzzi Mateo"}, {"codigo": "SE-5-ESA-9", "nombre": "Castro Catherine"}, {"codigo": "SE-5-ESA-10", "nombre": "Catalano Mortati Francisco"}, {"codigo": "SE-5-ESA-11", "nombre": "D'Angelo Giuliano"}, {"codigo": "SE-5-ESA-12", "nombre": "Di Rocco Lourdes"}, {"codigo": "SE-5-ESA-13", "nombre": "Di Salvo Ramiro"}, {"codigo": "SE-5-ESA-14", "nombre": "Fernández Abril"}, {"codigo": "SE-5-ESA-15", "nombre": "Garibotti Mercedes"}, {"codigo": "SE-5-ESA-16", "nombre": "Gavioli Isabella"}, {"codigo": "SE-5-ESA-17", "nombre": "Griffioen Julian"}, {"codigo": "SE-5-ESA-18", "nombre": "Hermida Arnaiz Fausto"}, {"codigo": "SE-5-ESA-19", "nombre": "Kees Brunella Loana"}, {"codigo": "SE-5-ESA-20", "nombre": "Kreff Wenceslao"}, {"codigo": "SE-5-ESA-21", "nombre": "Larsen Indiana"}, {"codigo": "SE-5-ESA-22", "nombre": "López Llopis Simón"}, {"codigo": "SE-5-ESA-23", "nombre": "Mansilla Gonzalez Martina"}, {"codigo": "SE-5-ESA-24", "nombre": "Mohamed Sofía"}, {"codigo": "SE-5-ESA-25", "nombre": "Osorio Bautista Daniel"}, {"codigo": "SE-5-ESA-26", "nombre": "Pedersen Einar"}, {"codigo": "SE-5-ESA-27", "nombre": "Pesalaccia Gonzalo"}, {"codigo": "SE-5-ESA-28", "nombre": "Portales Felipe Valentin"}, {"codigo": "SE-5-ESA-29", "nombre": "Ruiz Juan Francisco"}, {"codigo": "SE-5-ESA-30", "nombre": "Sagardoy Evelyn"}, {"codigo": "SE-5-ESA-31", "nombre": "Scampini Carmela"}, {"codigo": "SE-5-ESA-32", "nombre": "Schumacher Aiello Pedro"}, {"codigo": "SE-6-CN-1", "nombre": "Anaya María Belén"}, {"codigo": "SE-6-CN-2", "nombre": "Ares Emma"}, {"codigo": "SE-6-CN-3", "nombre": "Augusto Iñaki"}, {"codigo": "SE-6-CN-4", "nombre": "Ballatore Patricio"}, {"codigo": "SE-6-CN-5", "nombre": "Bracco Francisco"}, {"codigo": "SE-6-CN-6", "nombre": "Bracco Juana"}, {"codigo": "SE-6-CN-7", "nombre": "Cepeda Facundo"}, {"codigo": "SE-6-CN-8", "nombre": "Dabien Legarreta Joaquin"}, {"codigo": "SE-6-CN-9", "nombre": "Elgart Francisco"}, {"codigo": "SE-6-CN-10", "nombre": "Fernandez Luna Jerónimo"}, {"codigo": "SE-6-CN-11", "nombre": "Frugoni Pedone Juan Ignacio"}, {"codigo": "SE-6-CN-12", "nombre": "Gagliardi Nicolás"}, {"codigo": "SE-6-CN-13", "nombre": "Garcia Dutto Nicolás"}, {"codigo": "SE-6-CN-14", "nombre": "Gimenez Martina"}, {"codigo": "SE-6-CN-15", "nombre": "Graziani Jal Isis Walkiria"}, {"codigo": "SE-6-CN-16", "nombre": "Gutierrez Martina Belen"}, {"codigo": "SE-6-CN-17", "nombre": "Huang Sofía"}, {"codigo": "SE-6-CN-18", "nombre": "Leguizamón Llopis Micaela"}, {"codigo": "SE-6-CN-19", "nombre": "Luna Thiago Mateo"}, {"codigo": "SE-6-CN-20", "nombre": "Martinez Santiago Ramiro"}, {"codigo": "SE-6-CN-21", "nombre": "Ottonello Barreda Tomás"}, {"codigo": "SE-6-CN-22", "nombre": "Pedone Mateo"}, {"codigo": "SE-6-CN-23", "nombre": "Pizarro Perez Tadeo"}, {"codigo": "SE-6-CN-24", "nombre": "Radrizzani Franco Benjamín"}, {"codigo": "SE-6-CN-25", "nombre": "Roteta Thiago Alejandro"}, {"codigo": "SE-6-CN-26", "nombre": "Stemphelet Thiago"}, {"codigo": "SE-6-CN-27", "nombre": "You Romina"}, {"codigo": "SE-6-EA-1", "nombre": "Amado Malena"}, {"codigo": "SE-6-EA-2", "nombre": "Argüello Rolón Aquiles"}, {"codigo": "SE-6-EA-3", "nombre": "Bracco Emilia"}, {"codigo": "SE-6-EA-4", "nombre": "Brüel Felipe"}, {"codigo": "SE-6-EA-5", "nombre": "Bruzzese Marinetti Francisco"}, {"codigo": "SE-6-EA-6", "nombre": "Cañueto Constanza"}, {"codigo": "SE-6-EA-7", "nombre": "Coelli Lourdes"}, {"codigo": "SE-6-EA-8", "nombre": "Cuello Ballerini Azul De Los Milagros"}, {"codigo": "SE-6-EA-9", "nombre": "Di Rocco Genaro"}, {"codigo": "SE-6-EA-10", "nombre": "Duhau Lourdes Mariana"}, {"codigo": "SE-6-EA-11", "nombre": "Elicalde Joaquin Esteban"}, {"codigo": "SE-6-EA-12", "nombre": "Esquivel Perez Victoria Catalina"}, {"codigo": "SE-6-EA-13", "nombre": "Fersen Alejo"}, {"codigo": "SE-6-EA-14", "nombre": "Gándara Borda Sara"}, {"codigo": "SE-6-EA-15", "nombre": "Giacchetti Victoria"}, {"codigo": "SE-6-EA-16", "nombre": "Jacobsen Jan"}, {"codigo": "SE-6-EA-17", "nombre": "Lopez Di Benedetto Morena Agustina"}, {"codigo": "SE-6-EA-18", "nombre": "Mateo Fátima"}, {"codigo": "SE-6-EA-19", "nombre": "Muda Juan Pedro"}, {"codigo": "SE-6-EA-20", "nombre": "Ruso Agustín"}, {"codigo": "SE-6-EA-21", "nombre": "Stefano Micaela"}, {"codigo": "SE-6-EA-22", "nombre": "Zangoni Constantino"}, {"codigo": "SE-6-ESA-1", "nombre": "Adamo José Ignacio"}, {"codigo": "SE-6-ESA-2", "nombre": "Andino Maika Helena"}, {"codigo": "SE-6-ESA-3", "nombre": "Arana Iaconis Pilar"}, {"codigo": "SE-6-ESA-4", "nombre": "Baldessari Mateo"}, {"codigo": "SE-6-ESA-5", "nombre": "Benavidez Nielsen Bautista"}, {"codigo": "SE-6-ESA-6", "nombre": "Borcano Benjamín"}, {"codigo": "SE-6-ESA-7", "nombre": "Brown Santiago Joaquín"}, {"codigo": "SE-6-ESA-8", "nombre": "Buus Juan Ignacio"}, {"codigo": "SE-6-ESA-9", "nombre": "Chamús Gonzalez Camila"}, {"codigo": "SE-6-ESA-10", "nombre": "Ciucci Franco Jorge"}, {"codigo": "SE-6-ESA-11", "nombre": "Come Aarón"}, {"codigo": "SE-6-ESA-12", "nombre": "Contigiani Josefina"}, {"codigo": "SE-6-ESA-13", "nombre": "D'Angelo Antonio"}, {"codigo": "SE-6-ESA-14", "nombre": "D'Angelo Daiana"}, {"codigo": "SE-6-ESA-15", "nombre": "D'Annunzio Mariano"}, {"codigo": "SE-6-ESA-16", "nombre": "De La Cal Joaquin"}, {"codigo": "SE-6-ESA-17", "nombre": "Dumrauf Storm Martina"}, {"codigo": "SE-6-ESA-18", "nombre": "Falco Morena Giselle"}, {"codigo": "SE-6-ESA-19", "nombre": "Falco Zaira Naiara"}, {"codigo": "SE-6-ESA-20", "nombre": "Giles Bernal Uma"}, {"codigo": "SE-6-ESA-21", "nombre": "Haugaard Bernardo"}, {"codigo": "SE-6-ESA-22", "nombre": "Kreff Marcos"}, {"codigo": "SE-6-ESA-23", "nombre": "Mathisen Alex"}, {"codigo": "SE-6-ESA-24", "nombre": "Menna Echarry Amparo"}, {"codigo": "SE-6-ESA-25", "nombre": "Menna Fiorda Bautista"}, {"codigo": "SE-6-ESA-26", "nombre": "Monte Manterola Benjamin"}, {"codigo": "SE-6-ESA-27", "nombre": "Noguera Chiquetti Anahel"}, {"codigo": "SE-6-ESA-28", "nombre": "Ordoqui Eloisa"}, {"codigo": "SE-6-ESA-29", "nombre": "Palmieri Brian"}, {"codigo": "SE-6-ESA-30", "nombre": "Pedersen Teo Martín"}, {"codigo": "SE-6-ESA-31", "nombre": "Perrone Jeremías"}, {"codigo": "SE-6-ESA-32", "nombre": "Pili Lautaro"}, {"codigo": "SE-6-ESA-33", "nombre": "Rounds Dakota Ann"}, {"codigo": "SE-6-ESA-34", "nombre": "Van Der Horst Skou Francisco"}, {"codigo": "SE-6-ESA-35", "nombre": "Weinzettel Francisco Benjamin"}, {"codigo": "SE-1-1-1", "nombre": "AGUILERA PALACIOS, Benjamín"}, {"codigo": "SE-1-1-2", "nombre": "ALVAREZ SASSOLA, Milo"}, {"codigo": "SE-1-1-3", "nombre": "AMUCHASTEGUI, Fermín"}, {"codigo": "SE-1-1-4", "nombre": "ARENZANA RODERA, Bautista"}, {"codigo": "SE-1-1-5", "nombre": "BARRIONUEVO GHIO, Ciro"}, {"codigo": "SE-1-1-6", "nombre": "BECALUBA, Rafaela"}, {"codigo": "SE-1-1-7", "nombre": "BOTTINO, Juana"}, {"codigo": "SE-1-1-8", "nombre": "CASABLANCA, Uma"}, {"codigo": "SE-1-1-9", "nombre": "CHAMUS GONZALEZ, Carolina"}, {"codigo": "SE-1-1-10", "nombre": "CONCHA FJELLERUP, Maria Mercedes"}, {"codigo": "SE-1-1-11", "nombre": "DUHAU, André Faustino"}, {"codigo": "SE-1-1-12", "nombre": "FERNANDEZ, Catalina"}, {"codigo": "SE-1-1-13", "nombre": "FEULA, Gerónimo"}, {"codigo": "SE-1-1-14", "nombre": "FLORES VASSOLO, Maia"}, {"codigo": "SE-1-1-15", "nombre": "GAJDUCZYK MUNAR, Emanuel"}, {"codigo": "SE-1-1-16", "nombre": "GARCÍA DISTEFANO, Milo"}, {"codigo": "SE-1-1-17", "nombre": "GHIO, Juliana"}, {"codigo": "SE-1-1-18", "nombre": "HALBERG, Mora"}, {"codigo": "SE-1-1-19", "nombre": "HOURIET, Isabella"}, {"codigo": "SE-1-1-20", "nombre": "MARTINEZ SACCO, Hilario"}, {"codigo": "SE-1-1-21", "nombre": "MENNA VACCANI, Juana"}, {"codigo": "SE-1-1-22", "nombre": "MORAN, Loana Jazmin"}, {"codigo": "SE-1-1-23", "nombre": "NAVARRO, Lucía"}, {"codigo": "SE-1-1-24", "nombre": "OÑATIBIA HERBSOMMER, Felipe Iñaki"}, {"codigo": "SE-1-1-25", "nombre": "PETERSEN, Noah"}, {"codigo": "SE-1-1-26", "nombre": "ROSALES LAMBERTI, Salvador"}, {"codigo": "SE-1-1-27", "nombre": "SARASQUETA, Fausto"}, {"codigo": "SE-1-1-28", "nombre": "TORRACA REGERT, María Paz Munay"}, {"codigo": "SE-1-1-29", "nombre": "TRIBUSON, Ainhara"}, {"codigo": "SE-1-1-30", "nombre": "VISCONTI ISMAEL, Mateo Benjamín"}, {"codigo": "SE-1-1-31", "nombre": "ZÁRATE YANE, Jazmín"}, {"codigo": "SE-1-2-1", "nombre": "ALDERETE LEDESMA, Isabella Milenka"}, {"codigo": "SE-1-2-2", "nombre": "AMBROSIUS, Nicolás Arvid"}, {"codigo": "SE-1-2-3", "nombre": "ATELA, Dulce María"}, {"codigo": "SE-1-2-4", "nombre": "AYMONINO, Clara"}, {"codigo": "SE-1-2-5", "nombre": "BARRIONUEVO ANGST, Dante"}, {"codigo": "SE-1-2-6", "nombre": "CAMEJO ERRAMUSPE, Josefina"}, {"codigo": "SE-1-2-7", "nombre": "CARROZZI, Pilar"}, {"codigo": "SE-1-2-8", "nombre": "CAZALAS, Elena"}, {"codigo": "SE-1-2-9", "nombre": "CHICO, Kamila"}, {"codigo": "SE-1-2-10", "nombre": "D'ANNUNZIO, Francisco"}, {"codigo": "SE-1-2-11", "nombre": "DUHAU, Arie Benjamín"}, {"codigo": "SE-1-2-12", "nombre": "EXPÓSITO, Delfina"}, {"codigo": "SE-1-2-13", "nombre": "FIGINI, Dante"}, {"codigo": "SE-1-2-14", "nombre": "GABILONDO LEMBLE, Fausto"}, {"codigo": "SE-1-2-15", "nombre": "GANIM, Bruno"}, {"codigo": "SE-1-2-16", "nombre": "GARCÍA, Damián Imanol"}, {"codigo": "SE-1-2-17", "nombre": "GONZALEZ, Faustino"}, {"codigo": "SE-1-2-18", "nombre": "LOSADA PEDROSA, Frida"}, {"codigo": "SE-1-2-19", "nombre": "MARINANGELI, Rosario"}, {"codigo": "SE-1-2-20", "nombre": "MIRANDA DIAZ, Martina"}, {"codigo": "SE-1-2-21", "nombre": "MUDA, Ceferino"}, {"codigo": "SE-1-2-22", "nombre": "OKMACA OLLETA, Ivo"}, {"codigo": "SE-1-2-23", "nombre": "O'LERY, Faustino"}, {"codigo": "SE-1-2-24", "nombre": "PERICOLO, Giovanni"}, {"codigo": "SE-1-2-25", "nombre": "RASMUSSEN, Federica"}, {"codigo": "SE-1-2-26", "nombre": "RODRIGUEZ, Gustavo Benjamin"}, {"codigo": "SE-1-2-27", "nombre": "RODRIGUEZ ZUBELDIA, Martina"}, {"codigo": "SE-1-2-28", "nombre": "ROTETA, Aharon David"}, {"codigo": "SE-1-2-29", "nombre": "SCHENK OLIVA, Mia"}, {"codigo": "SE-1-2-30", "nombre": "YOU, Linda"}, {"codigo": "SE-1-3-1", "nombre": "AGUILERA, Amalia"}, {"codigo": "SE-1-3-2", "nombre": "AMUCHASTEGUI, Albertina"}, {"codigo": "SE-1-3-3", "nombre": "ARIAS, Valentino"}, {"codigo": "SE-1-3-4", "nombre": "BRACCO, Alfonso"}, {"codigo": "SE-1-3-5", "nombre": "BRUZZESE MARINETTI, Leopoldo"}, {"codigo": "SE-1-3-6", "nombre": "CABODEVILA AMBROSIUS, Elena"}, {"codigo": "SE-1-3-7", "nombre": "CHIMENTI, Constanza"}, {"codigo": "SE-1-3-8", "nombre": "CORTADI, Catalina"}, {"codigo": "SE-1-3-9", "nombre": "DEGIUSEPPE, Angela Fiorella"}, {"codigo": "SE-1-3-10", "nombre": "DI CROCE, Paz Agustina"}, {"codigo": "SE-1-3-11", "nombre": "ELISIRI, Francisco"}, {"codigo": "SE-1-3-12", "nombre": "GARCÍA OLSEN, Francisco"}, {"codigo": "SE-1-3-13", "nombre": "GIORDANI, Mateo"}, {"codigo": "SE-1-3-14", "nombre": "GODOY, Camila"}, {"codigo": "SE-1-3-15", "nombre": "GONZÁLEZ, Amelie"}, {"codigo": "SE-1-3-16", "nombre": "JORGENSEN, Bautista"}, {"codigo": "SE-1-3-17", "nombre": "MALDONADO BUSTOS, Gino"}, {"codigo": "SE-1-3-18", "nombre": "MARTÍNEZ LAGÚN, Valentino"}, {"codigo": "SE-1-3-19", "nombre": "MATTA POULSEN, Francisco"}, {"codigo": "SE-1-3-20", "nombre": "MOHAMED, Clara Aylen"}, {"codigo": "SE-1-3-21", "nombre": "NGUYEN DALINGER, Benjamín"}, {"codigo": "SE-1-3-22", "nombre": "O'LERY, Emilia"}, {"codigo": "SE-1-3-23", "nombre": "PETELA, Luca"}, {"codigo": "SE-1-3-24", "nombre": "PETRONIO ECHARRY, Dante"}, {"codigo": "SE-1-3-25", "nombre": "PINTOS, Olivia"}, {"codigo": "SE-1-3-26", "nombre": "RANZINI DÍAZ, Ciro"}, {"codigo": "SE-1-3-27", "nombre": "RUÍZ DE AZÚA, Pía"}, {"codigo": "SE-1-3-28", "nombre": "URBINA RIDINO, Tomas"}, {"codigo": "SE-1-3-29", "nombre": "VILCHES, Francisca María"}, {"codigo": "SE-7-1", "nombre": ""}, {"codigo": "SE-7-2", "nombre": ""}, {"codigo": "SE-7-3", "nombre": ""}, {"codigo": "SE-7-4", "nombre": ""}, {"codigo": "SE-7-5", "nombre": ""}, {"codigo": "SE-7-6", "nombre": ""}, {"codigo": "SE-7-7", "nombre": ""}, {"codigo": "SE-7-8", "nombre": ""}, {"codigo": "MARATÓN-1-1", "nombre": "MARATÓN 1-1"}, {"codigo": "MARATÓN-1-2", "nombre": "MARATÓN 1-2"}, {"codigo": "MARATÓN-1-3", "nombre": "MARATÓN 1-3"}, {"codigo": "MARATÓN-2-1", "nombre": "MARATÓN 2-1"}, {"codigo": "MARATÓN-2-2", "nombre": "MARATÓN 2-2"}, {"codigo": "MARATÓN-2-3", "nombre": "MARATÓN 2-3"}, {"codigo": "MARATÓN-3-1", "nombre": "MARATÓN 3-1"}, {"codigo": "MARATÓN-3-2", "nombre": "MARATÓN 3-2"}, {"codigo": "MARATÓN-3-3", "nombre": "MARATÓN 3-3"}, {"codigo": "MARATÓN-4-CN", "nombre": "MARATÓN 4-CN"}, {"codigo": "MARATÓN-4-EA", "nombre": "MARATÓN 4-EA"}, {"codigo": "MARATÓN-4-ESA", "nombre": "MARATÓN 4-ESA"}, {"codigo": "MARATÓN-5-CN", "nombre": "MARATÓN 5-CN"}, {"codigo": "MARATÓN-5-EA", "nombre": "MARATÓN 5-EA"}, {"codigo": "MARATÓN-5-ESA", "nombre": "MARATÓN 5-ESA"}, {"codigo": "MARATÓN-6-CN", "nombre": "MARATÓN 6-CN"}, {"codigo": "MARATÓN-6-EA", "nombre": "MARATÓN 6-EA"}, {"codigo": "MARATÓN-6-ESA", "nombre": "MARATÓN 6-ESA"}, {"codigo": "NIMB-PAULA", "nombre": "NIMB-PAULA"}, {"codigo": "MARATÓN-NP", "nombre": "MARATÓN NP"}, {"codigo": "SE-6-ESA-19", "nombre": "RODRÍGUEZ LAURIDSEN, Hebe Caterina"}, {"codigo": "SE-6-ESA-20", "nombre": "SCHONFELD, Matías"}, {"codigo": "SE-6-ESA-21", "nombre": "SEGUNDO PIZARRO, Eric Gabriel"}, {"codigo": "SE-6-ESA-22", "nombre": "SELINGER, Antonio"}, {"codigo": "SE-6-ESA-23", "nombre": "VALENZUELA, Mariano Norberto"}, {"codigo": "SE-6-ESA-24", "nombre": "VAN STRIEN, Santiago Nehuén"}, {"codigo": "SE-6-ESA-25", "nombre": "VASSOLO, Simón"}, {"codigo": "SE-7-ESA-1", "nombre": "CASTILLO, Joaquín Emanuel"}, {"codigo": "SE-6-1-EA-13", "nombre": "CONTIGIANI, Guadalupe"}, {"codigo": "SE-6-1-EA-14", "nombre": "GALANTE, Santiago"}, {"codigo": "SE-6-1-EA-15", "nombre": "GALLI, Jonathan Sebastián"}, {"codigo": "SE-6-1-EA-16", "nombre": "GONZÁLEZ, Máximo Ramiro"}, {"codigo": "SE-6-1-EA-17", "nombre": "KUHN, Alan Antonio"}, {"codigo": "SE-6-1-EA-18", "nombre": "RODRÍGUEZ, Lucía Milagros"}, {"codigo": "SE-6-1-EA-19", "nombre": "ZABALEGUI, Sofía"}, {"codigo": "SE-7-ESA-1", "nombre": "CASTILLO, Joaquín Emanuel"}, {"codigo": "SE-7-ESA-2", "nombre": "CONTIGIANI, Guadalupe"}, {"codigo": "SE-7-ESA-3", "nombre": "GALANTE, Santiago"}, {"codigo": "SE-7-ESA-4", "nombre": "GALLI, Jonathan Sebastián"}, {"codigo": "SE-7-ESA-5", "nombre": "GONZÁLEZ, Máximo Ramiro"}, {"codigo": "SE-7-ESA-6", "nombre": "KUHN, Alan Antonio"}, {"codigo": "SE-7-ESA-7", "nombre": "RODRÍGUEZ, Lucía Milagros"}, {"codigo": "SE-7-ESA-8", "nombre": "ZABALEGUI, Sofía"}];
+
+function cargarDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      DB = JSON.parse(raw);
+    } else {
+      // migrar datos viejos
+      migrarDatosViejos();
+    }
+  } catch(e) { DB = { socios: [], recursos: [], prestamos: [] }; }
+  // Si no hay socios guardados, cargar los del listado oficial
+  if (DB.socios.length === 0) {
+    DB.socios = SOCIOS_SEED.map(s => ({ codigo: s.codigo, nombre: s.nombre }));
+    guardarDB();
+  }
+}
+
+function guardarDB() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+  } catch(e) { toast('⚠️ Error al guardar: almacenamiento lleno', 'red'); }
+}
+
+function migrarDatosViejos() {
+  const vSocios    = localStorage.getItem('bib_socios')    || localStorage.getItem('socios');
+  const vRecursos  = localStorage.getItem('bib_recursos')  || localStorage.getItem('recursos');
+  const vPrestamos = localStorage.getItem('bib_prestamos') || localStorage.getItem('prestamos');
+
+  if (vSocios) {
+    try {
+      const arr = JSON.parse(vSocios);
+      DB.socios = arr.map(s => ({ codigo: String(s.codigo || s.id || '').trim(), nombre: String(s.nombre || '').trim() })).filter(s => s.codigo);
+    } catch(e) {}
+  }
+  if (vRecursos) {
+    try {
+      const arr = JSON.parse(vRecursos);
+      DB.recursos = arr.map(r => ({ codigo: String(r.codigo || r.id || '').trim(), titulo: String(r.titulo || '').trim() })).filter(r => r.codigo);
+    } catch(e) {}
+  }
+  if (vPrestamos) {
+    try {
+      const arr = JSON.parse(vPrestamos);
+      DB.prestamos = arr.map(p => ({
+        id: p.id || Date.now(),
+        socioId:          String(p.socioId || ''),
+        recursoId:        String(p.recursoId || ''),
+        fechaPrestamo:    p.fechaPrestamo    || '',
+        fechaVencimiento: p.fechaVencimiento || '',
+        tipoPrestamo:     p.tipoPrestamo     || '',
+        estado:           p.estado           || 'prestado',
+        fechaDevolucion:  p.fechaDevolucion  || ''
+      }));
+    } catch(e) {}
+  }
+  guardarDB();
+}
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+const getSocio   = cod => DB.socios.find(s => s.codigo === String(cod).trim());
+const getRecurso = cod => DB.recursos.find(r => r.codigo === String(cod).trim());
+const hoy        = () => new Date().toISOString().split('T')[0];
+const mesActual  = () => new Date().toISOString().slice(0, 7);
+
+function estadoRecurso(cod) {
+  const p = DB.prestamos.find(p =>
+    p.recursoId === String(cod).trim() && (p.estado === 'prestado' || p.estado === 'moroso')
+  );
+  return p ? p.estado : 'disponible';
+}
+
+function actualizarMorosos() {
+  const today = hoy();
+  let cambio = false;
+  DB.prestamos.forEach(p => {
+    if (p.estado === 'prestado' && p.fechaVencimiento && p.fechaVencimiento < today) {
+      p.estado = 'moroso'; cambio = true;
+    }
+  });
+  if (cambio) guardarDB();
+}
+
+const badgeEstado = e => ({
+  prestado:   '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">PRESTADO</span>',
+  moroso:     '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">MOROSO</span>',
+  devuelto:   '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">DEVUELTO</span>',
+  disponible: '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700">DISPONIBLE</span>',
+}[e] || `<span class="px-2 py-0.5 text-xs rounded-full bg-gray-100">${e}</span>`);
+
+function toast(msg, color = 'gray') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.style.background = color === 'red' ? '#dc2626' : color === 'green' ? '#16a34a' : '#1e293b';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ══════════════════════════════════════════════
+// SIDEBAR MOBILE
+// ══════════════════════════════════════════════
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+
+// ══════════════════════════════════════════════
+// NAVEGACIÓN
+// ══════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('tab-hidden'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('nav-active'));
+  const pane = document.getElementById(name + '-tab');
+  const btn  = document.querySelector(`[data-tab="${name}"]`);
+  if (pane) pane.classList.remove('tab-hidden');
+  if (btn)  btn.classList.add('nav-active');
+  actualizarMorosos();
+
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+
+  ({
+    dashboard:    updateDashboard,
+    socios:       renderSocios,
+    recursos:     renderRecursos,
+    prestamos:    renderPrestamos,
+    devoluciones: renderDevoluciones,
+    morosos:      renderMorosos,
+    movimientos:  () => {
+      const inp = document.getElementById('mov-mes');
+      if (!inp.value) inp.value = mesActual();
+      renderMovimientos();
+    }
+  })[name]?.();
+}
+
+// ══════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════
+function updateDashboard() {
+  actualizarMorosos();
+  const activos = DB.prestamos.filter(p => p.estado === 'prestado' || p.estado === 'moroso');
+  document.getElementById('cnt-recursos').textContent  = DB.recursos.length;
+  document.getElementById('cnt-socios').textContent    = DB.socios.length;
+  document.getElementById('cnt-prestamos').textContent = activos.length;
+  document.getElementById('cnt-morosos').textContent   = DB.prestamos.filter(p => p.estado === 'moroso').length;
+
+  const recientes = [...activos].sort((a,b) => b.fechaPrestamo.localeCompare(a.fechaPrestamo)).slice(0,5);
+  document.getElementById('dash-recientes').innerHTML = recientes.length === 0
+    ? '<p class="text-gray-400 text-sm">Sin préstamos activos</p>'
+    : recientes.map(p => {
+        const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+        return `<div class="flex justify-between items-center py-2 border-b last:border-0">
+          <div><p class="font-medium text-sm">${s?.nombre || p.socioId}</p>
+               <p class="text-xs text-gray-400 mono">${r?.titulo || p.recursoId}</p></div>
+          ${badgeEstado(p.estado)}</div>`;
+      }).join('');
+
+  const conteo = {};
+  DB.prestamos.forEach(p => { conteo[p.recursoId] = (conteo[p.recursoId] || 0) + 1; });
+  const pop = Object.entries(conteo).sort((a,b) => b[1]-a[1]).slice(0,5);
+  document.getElementById('dash-populares').innerHTML = pop.length === 0
+    ? '<p class="text-gray-400 text-sm">Sin datos</p>'
+    : pop.map(([cod, n]) => {
+        const r = getRecurso(cod);
+        return `<div class="flex justify-between items-center py-2 border-b last:border-0">
+          <div><p class="font-medium text-sm">${r?.titulo || cod}</p>
+               <p class="text-xs text-gray-400">Código: ${cod}</p></div>
+          <span class="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">${n}</span>
+        </div>`;
+      }).join('');
+}
+
+// ══════════════════════════════════════════════
+// SOCIOS
+// ══════════════════════════════════════════════
+let _editSocioCodigo = null;
+
+function renderSocios() {
+  const q = (document.getElementById('buscar-socio')?.value || '').toLowerCase();
+  const lista = DB.socios.filter(s =>
+    s.codigo.toLowerCase().includes(q) || s.nombre.toLowerCase().includes(q)
+  );
+  document.getElementById('tbody-socios').innerHTML = lista.length === 0
+    ? `<tr><td colspan="4" class="text-center py-8 text-gray-400">Sin resultados</td></tr>`
+    : lista.map(s => {
+        const nP = DB.prestamos.filter(p => p.socioId === s.codigo && (p.estado === 'prestado' || p.estado === 'moroso')).length;
+        const isMoroso = DB.prestamos.some(p => p.socioId === s.codigo && p.estado === 'moroso');
+        return `<tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${s.codigo}</td>
+          <td class="px-4 py-3 font-medium">${s.nombre}${isMoroso ? ' <span class="text-xs text-red-500">⚠️</span>' : ''}</td>
+          <td class="px-4 py-3">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${nP > 0 ? (isMoroso ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700') : 'bg-green-100 text-green-700'}">
+              ${nP} / 3
+            </span>
+          </td>
+          <td class="px-4 py-3">
+            <div class="flex gap-3 flex-wrap text-xs">
+              <button onclick="verRecursosSocio('${s.codigo}')" class="text-blue-600 hover:underline">👁 Ver</button>
+              <button onclick="editarSocio('${s.codigo}')" class="text-indigo-600 hover:underline">✏️ Editar</button>
+              <button onclick="eliminarSocio('${s.codigo}')" class="text-red-500 hover:underline">🗑️ Eliminar</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+function abrirModalSocio() {
+  _editSocioCodigo = null;
+  document.getElementById('modal-socio-titulo').textContent = 'Nuevo Socio';
+  document.getElementById('socio-f-codigo').value = '';
+  document.getElementById('socio-f-codigo').disabled = false;
+  document.getElementById('socio-f-nombre').value = '';
+  document.getElementById('modal-socio').classList.remove('hidden');
+  setTimeout(() => document.getElementById('socio-f-codigo').focus(), 50);
+}
+
+function editarSocio(codigo) {
+  const s = getSocio(codigo); if (!s) return;
+  _editSocioCodigo = codigo;
+  document.getElementById('modal-socio-titulo').textContent = 'Editar Socio';
+  document.getElementById('socio-f-codigo').value = s.codigo;
+  document.getElementById('socio-f-codigo').disabled = false;
+  document.getElementById('socio-f-codigo').dataset.originalCodigo = codigo;
+  document.getElementById('socio-f-nombre').value = s.nombre;
+  document.getElementById('modal-socio').classList.remove('hidden');
+  setTimeout(() => document.getElementById('socio-f-nombre').focus(), 50);
+}
+
+function guardarSocio() {
+  const codigo = document.getElementById('socio-f-codigo').value.trim();
+  const nombre = document.getElementById('socio-f-nombre').value.trim();
+  if (!codigo || !nombre) { toast('⚠️ Código y nombre son obligatorios', 'red'); return; }
+
+  if (_editSocioCodigo) {
+    const idx = DB.socios.findIndex(s => s.codigo === _editSocioCodigo);
+    if (idx >= 0) {
+      // Si cambiaron el código, actualizar también en préstamos
+      if (codigo !== _editSocioCodigo) {
+        if (DB.socios.some((s, i) => s.codigo === codigo && i !== idx)) {
+          toast('⚠️ Ese código ya existe en otro socio', 'red'); return;
+        }
+        DB.prestamos.forEach(p => { if (p.socioId === _editSocioCodigo) p.socioId = codigo; });
+        DB.socios[idx].codigo = codigo;
+      }
+      DB.socios[idx].nombre = nombre;
+    }
+  } else {
+    if (DB.socios.some(s => s.codigo === codigo)) { toast('⚠️ Ese código ya existe', 'red'); return; }
+    DB.socios.push({ codigo, nombre });
+  }
+  guardarDB();
+  cerrarModal('modal-socio');
+  renderSocios();
+  updateDashboard();
+  toast('✅ Socio guardado');
+}
+
+function eliminarSocio(codigo) {
+  const activos = DB.prestamos.filter(p => p.socioId === codigo && (p.estado === 'prestado' || p.estado === 'moroso'));
+  if (activos.length > 0) { toast('⚠️ El socio tiene préstamos activos', 'red'); return; }
+  if (!confirm('¿Eliminar este socio y su historial?')) return;
+  DB.socios    = DB.socios.filter(s => s.codigo !== codigo);
+  DB.prestamos = DB.prestamos.filter(p => p.socioId !== codigo);
+  guardarDB(); renderSocios(); updateDashboard();
+  toast('🗑️ Socio eliminado');
+}
+
+function verRecursosSocio(codigo) {
+  const s  = getSocio(codigo);
+  const ps = DB.prestamos.filter(p => p.socioId === codigo && (p.estado === 'prestado' || p.estado === 'moroso'));
+  document.getElementById('ver-recursos-titulo').textContent = `Recursos de ${s?.nombre || codigo}`;
+  document.getElementById('ver-recursos-body').innerHTML = ps.length === 0
+    ? '<p class="text-gray-400 text-sm">Sin recursos prestados actualmente.</p>'
+    : ps.map(p => {
+        const r = getRecurso(p.recursoId);
+        return `<div class="border rounded-lg p-3 text-sm ${p.estado === 'moroso' ? 'border-red-200 bg-red-50' : ''}">
+          <p class="font-semibold">${r?.titulo || p.recursoId}</p>
+          <p class="text-gray-500 text-xs">Código: ${p.recursoId} · Tipo: ${p.tipoPrestamo}</p>
+          <p class="text-gray-500 text-xs">Prestado: ${p.fechaPrestamo} · Vence: ${p.fechaVencimiento}</p>
+          <div class="mt-1">${badgeEstado(p.estado)}</div>
+        </div>`;
+      }).join('');
+  document.getElementById('modal-ver-recursos').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════════
+// RECURSOS
+// ══════════════════════════════════════════════
+let _editRecursoCodigo = null;
+
+function renderRecursos() {
+  const q = (document.getElementById('buscar-recurso')?.value || '').toLowerCase();
+  const lista = DB.recursos.filter(r =>
+    r.codigo.toLowerCase().includes(q) || r.titulo.toLowerCase().includes(q)
+  );
+  document.getElementById('tbody-recursos').innerHTML = lista.length === 0
+    ? `<tr><td colspan="4" class="text-center py-8 text-gray-400">Sin resultados</td></tr>`
+    : lista.map(r => {
+        const est = estadoRecurso(r.codigo);
+        return `<tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${r.codigo}</td>
+          <td class="px-4 py-3 font-medium">${r.titulo}</td>
+          <td class="px-4 py-3">${badgeEstado(est)}</td>
+          <td class="px-4 py-3">
+            <div class="flex gap-3 text-xs">
+              <button onclick="editarRecurso('${r.codigo}')" class="text-indigo-600 hover:underline">✏️ Editar</button>
+              <button onclick="eliminarRecurso('${r.codigo}')" class="text-red-500 hover:underline">🗑️ Eliminar</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+function abrirModalRecurso() {
+  _editRecursoCodigo = null;
+  document.getElementById('modal-recurso-titulo').textContent = 'Nuevo Recurso';
+  document.getElementById('recurso-f-codigo').value = '';
+  document.getElementById('recurso-f-codigo').disabled = false;
+  document.getElementById('recurso-f-titulo').value = '';
+  document.getElementById('modal-recurso').classList.remove('hidden');
+  setTimeout(() => document.getElementById('recurso-f-codigo').focus(), 50);
+}
+
+function editarRecurso(codigo) {
+  const r = getRecurso(codigo); if (!r) return;
+  _editRecursoCodigo = codigo;
+  document.getElementById('modal-recurso-titulo').textContent = 'Editar Recurso';
+  document.getElementById('recurso-f-codigo').value = r.codigo;
+  document.getElementById('recurso-f-codigo').disabled = true;
+  document.getElementById('recurso-f-titulo').value = r.titulo;
+  document.getElementById('modal-recurso').classList.remove('hidden');
+  setTimeout(() => document.getElementById('recurso-f-titulo').focus(), 50);
+}
+
+function guardarRecurso() {
+  const codigo = document.getElementById('recurso-f-codigo').value.trim();
+  const titulo = document.getElementById('recurso-f-titulo').value.trim();
+  if (!codigo || !titulo) { toast('⚠️ Código y título son obligatorios', 'red'); return; }
+
+  if (_editRecursoCodigo) {
+    const idx = DB.recursos.findIndex(r => r.codigo === _editRecursoCodigo);
+    if (idx >= 0) DB.recursos[idx].titulo = titulo;
+  } else {
+    if (DB.recursos.some(r => r.codigo === codigo)) { toast('⚠️ Ese código ya existe', 'red'); return; }
+    DB.recursos.push({ codigo, titulo });
+  }
+  guardarDB();
+  cerrarModal('modal-recurso');
+  renderRecursos();
+  updateDashboard();
+  toast('✅ Recurso guardado');
+}
+
+function eliminarRecurso(codigo) {
+  if (estadoRecurso(codigo) !== 'disponible') { toast('⚠️ El recurso está prestado', 'red'); return; }
+  if (!confirm('¿Eliminar este recurso?')) return;
+  DB.recursos  = DB.recursos.filter(r => r.codigo !== codigo);
+  DB.prestamos = DB.prestamos.filter(p => p.recursoId !== codigo);
+  guardarDB(); renderRecursos(); updateDashboard();
+  toast('🗑️ Recurso eliminado');
+}
+
+// ══════════════════════════════════════════════
+// MODAL PRÉSTAMO – AUTOCOMPLETE SOCIOS
+// ══════════════════════════════════════════════
+let _socioSeleccionado = null;
+let _recursosSeleccionados = []; // array de codigos
+
+function filtrarSociosAC() {
+  if (_socioSeleccionado) return;
+  const q   = document.getElementById('p-buscar-socio').value.toLowerCase();
+  const box = document.getElementById('ac-socios');
+  const res = DB.socios.filter(s =>
+    s.codigo.toLowerCase().includes(q) || s.nombre.toLowerCase().includes(q)
+  ).slice(0, 20);
+
+  if (!q && res.length === 0) { box.classList.add('hidden'); return; }
+  if (res.length === 0) {
+    box.innerHTML = '<div class="autocomplete-item text-gray-400">Sin resultados</div>';
+    box.classList.remove('hidden'); return;
+  }
+  box.innerHTML = res.map(s =>
+    `<div class="autocomplete-item" onclick="seleccionarSocio('${s.codigo}')">
+      <span class="code">${s.codigo}</span>
+      <span>${s.nombre}</span>
+    </div>`
+  ).join('');
+  box.classList.remove('hidden');
+}
+
+function seleccionarSocio(cod) {
+  const s = getSocio(cod); if (!s) return;
+  _socioSeleccionado = s;
+  document.getElementById('p-buscar-socio').value = '';
+  document.getElementById('ac-socios').classList.add('hidden');
+
+  document.getElementById('p-socio-id').value = s.codigo;
+  document.getElementById('p-socio-nombre').textContent = s.nombre;
+  document.getElementById('p-socio-codigo').textContent = `[${s.codigo}]`;
+  document.getElementById('p-socio-seleccionado').classList.remove('hidden');
+
+  const activos = DB.prestamos.filter(p => p.socioId === s.codigo && (p.estado === 'prestado' || p.estado === 'moroso'));
+  const infoEl = document.getElementById('p-socio-prestamos');
+  if (activos.length > 0) {
+    infoEl.innerHTML = `Ya tiene <strong>${activos.length}</strong> préstamo(s) activo(s). Puede agregar hasta ${3 - activos.length} más.`;
+  } else {
+    infoEl.innerHTML = 'Sin préstamos activos. Puede prestar hasta 3 recursos.';
+  }
+  actualizarResumenPrestamo();
+}
+
+function limpiarSocio() {
+  _socioSeleccionado = null;
+  document.getElementById('p-socio-id').value = '';
+  document.getElementById('p-socio-seleccionado').classList.add('hidden');
+  document.getElementById('p-buscar-socio').value = '';
+  document.getElementById('p-buscar-socio').focus();
+  actualizarResumenPrestamo();
+}
+
+// ── AUTOCOMPLETE RECURSOS ──
+function filtrarRecursosAC() {
+  const q   = document.getElementById('p-buscar-recurso').value.toLowerCase();
+  const box = document.getElementById('ac-recursos');
+  if (!q) { box.classList.add('hidden'); return; }
+
+  const disponibles = DB.recursos.filter(r =>
+    estadoRecurso(r.codigo) === 'disponible' &&
+    !_recursosSeleccionados.includes(r.codigo) &&
+    (r.codigo.toLowerCase().includes(q) || r.titulo.toLowerCase().includes(q))
+  ).slice(0, 20);
+
+  if (disponibles.length === 0) {
+    box.innerHTML = '<div class="autocomplete-item text-gray-400">Sin recursos disponibles</div>';
+    box.classList.remove('hidden'); return;
+  }
+  box.innerHTML = disponibles.map(r =>
+    `<div class="autocomplete-item" onclick="agregarRecurso('${r.codigo}')">
+      <span class="code">${r.codigo}</span>
+      <span class="truncate">${r.titulo}</span>
+    </div>`
+  ).join('');
+  box.classList.remove('hidden');
+}
+
+function agregarRecurso(cod) {
+  const maxPermitido = _socioSeleccionado
+    ? 3 - DB.prestamos.filter(p => p.socioId === _socioSeleccionado.codigo && (p.estado === 'prestado' || p.estado === 'moroso')).length
+    : 3;
+
+  if (_recursosSeleccionados.length >= maxPermitido) {
+    toast(`⚠️ No puede agregar más de ${maxPermitido} recurso(s) en esta ficha`, 'red'); return;
+  }
+  if (_recursosSeleccionados.includes(cod)) return;
+  _recursosSeleccionados.push(cod);
+  document.getElementById('p-buscar-recurso').value = '';
+  document.getElementById('ac-recursos').classList.add('hidden');
+  renderChipsRecursos();
+  actualizarResumenPrestamo();
+}
+
+function quitarRecurso(cod) {
+  _recursosSeleccionados = _recursosSeleccionados.filter(c => c !== cod);
+  renderChipsRecursos();
+  actualizarResumenPrestamo();
+}
+
+function renderChipsRecursos() {
+  const cont = document.getElementById('p-chips-recursos');
+  document.getElementById('p-cnt-recursos').textContent = _recursosSeleccionados.length;
+  if (_recursosSeleccionados.length === 0) {
+    cont.innerHTML = '<span class="text-gray-400 text-xs p-1">Ningún recurso seleccionado</span>';
+    return;
+  }
+  cont.innerHTML = _recursosSeleccionados.map(cod => {
+    const r = getRecurso(cod);
+    return `<span class="chip"><span class="code text-xs">${cod}</span> ${r?.titulo || cod} <span class="rm" onclick="quitarRecurso('${cod}')">&times;</span></span>`;
+  }).join('');
+}
+
+function actualizarResumenPrestamo() {
+  const resEl = document.getElementById('p-resumen');
+  if (_socioSeleccionado && _recursosSeleccionados.length > 0) {
+    const recursos = _recursosSeleccionados.map(c => {
+      const r = getRecurso(c);
+      return `<li>${r?.titulo || c} <span class="mono text-xs">[${c}]</span></li>`;
+    }).join('');
+    resEl.innerHTML = `<strong>Resumen:</strong> ${_socioSeleccionado.nombre} recibirá:<ul class="list-disc ml-4 mt-1 space-y-0.5">${recursos}</ul>`;
+    resEl.classList.remove('hidden');
+  } else {
+    resEl.classList.add('hidden');
+  }
+}
+
+// ══════════════════════════════════════════════
+// MODAL PRÉSTAMO – ABRIR / GUARDAR
+// ══════════════════════════════════════════════
+function abrirModalPrestamo() {
+  _socioSeleccionado     = null;
+  _recursosSeleccionados = [];
+
+  document.getElementById('p-buscar-socio').value   = '';
+  document.getElementById('p-buscar-recurso').value = '';
+  document.getElementById('p-socio-id').value       = '';
+  document.getElementById('p-socio-seleccionado').classList.add('hidden');
+  document.getElementById('ac-socios').classList.add('hidden');
+  document.getElementById('ac-recursos').classList.add('hidden');
+  document.getElementById('p-tipo').value    = '';
+  document.getElementById('p-tipo-custom').value = '';
+  document.getElementById('p-tipo-custom').classList.add('hidden');
+  document.getElementById('p-resumen').classList.add('hidden');
+
+  renderChipsRecursos();
+
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  document.getElementById('p-fecha-venc').value = d.toISOString().split('T')[0];
+
+  document.getElementById('modal-prestamo').classList.remove('hidden');
+  setTimeout(() => document.getElementById('p-buscar-socio').focus(), 80);
+}
+
+function toggleTipoCustom() {
+  const val = document.getElementById('p-tipo').value;
+  document.getElementById('p-tipo-custom').classList.toggle('hidden', val !== 'Otro');
+}
+
+function guardarPrestamo() {
+  const socioCod = document.getElementById('p-socio-id').value;
+  const tipoSel  = document.getElementById('p-tipo').value;
+  const tipoCust = document.getElementById('p-tipo-custom').value.trim();
+  const tipo     = tipoSel === 'Otro' ? tipoCust : tipoSel;
+  const fechaV   = document.getElementById('p-fecha-venc').value;
+
+  if (!socioCod)                    { toast('⚠️ Seleccioná un socio', 'red'); return; }
+  if (_recursosSeleccionados.length === 0) { toast('⚠️ Seleccioná al menos un recurso', 'red'); return; }
+  if (!tipo)                        { toast('⚠️ Seleccioná el tipo de préstamo', 'red'); return; }
+  if (!fechaV)                      { toast('⚠️ Ingresá la fecha de vencimiento', 'red'); return; }
+  if (fechaV <= hoy())              { toast('⚠️ La fecha de vencimiento debe ser futura', 'red'); return; }
+
+  const activos = DB.prestamos.filter(p => p.socioId === socioCod && (p.estado === 'prestado' || p.estado === 'moroso')).length;
+  if (activos + _recursosSeleccionados.length > 3) {
+    toast(`⚠️ El socio ya tiene ${activos} préstamo(s). No puede superar 3 en total.`, 'red'); return;
+  }
+
+  const fechaHoy = hoy();
+  _recursosSeleccionados.forEach((recursoCod, i) => {
+    DB.prestamos.push({
+      id:               Date.now() + i,
+      socioId:          socioCod,
+      recursoId:        recursoCod,
+      fechaPrestamo:    fechaHoy,
+      fechaVencimiento: fechaV,
+      tipoPrestamo:     tipo,
+      estado:           'prestado',
+      fechaDevolucion:  ''
+    });
+  });
+
+  guardarDB();
+  cerrarModal('modal-prestamo');
+  renderPrestamos();
+  updateDashboard();
+  toast(`✅ Préstamo registrado: ${_recursosSeleccionados.length} recurso(s)`, 'green');
+}
+
+// ══════════════════════════════════════════════
+// RENDER PRÉSTAMOS
+// ══════════════════════════════════════════════
+function renderPrestamos() {
+  actualizarMorosos();
+  const q = (document.getElementById('buscar-prestamo')?.value || '').toLowerCase();
+  const lista = DB.prestamos.filter(p => {
+    if (!q) return true;
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return p.socioId.toLowerCase().includes(q)
+      || (s?.nombre || '').toLowerCase().includes(q)
+      || p.recursoId.toLowerCase().includes(q)
+      || (r?.titulo || '').toLowerCase().includes(q);
+  }).sort((a,b) => b.fechaPrestamo.localeCompare(a.fechaPrestamo));
+
+  document.getElementById('tbody-prestamos').innerHTML = lista.length === 0
+    ? `<tr><td colspan="9" class="text-center py-8 text-gray-400">Sin préstamos</td></tr>`
+    : lista.map(p => {
+        const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+        const rowCls = p.estado === 'moroso' ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50';
+        return `<tr class="${rowCls}">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${s?.codigo || p.socioId}</td>
+          <td class="px-4 py-3 text-sm">${s?.nombre || '—'}</td>
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${r?.codigo || p.recursoId}</td>
+          <td class="px-4 py-3 text-sm">${r?.titulo || '—'}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.tipoPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.fechaPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.fechaVencimiento}</td>
+          <td class="px-4 py-3">${badgeEstado(p.estado)}</td>
+          <td class="px-4 py-3">
+            ${p.estado !== 'devuelto'
+              ? `<button onclick="eliminarPrestamo(${p.id})" class="text-red-500 hover:underline text-xs">🗑️</button>`
+              : '<span class="text-gray-300 text-xs">—</span>'}
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+function eliminarPrestamo(id) {
+  if (!confirm('¿Eliminar este préstamo del historial?')) return;
+  DB.prestamos = DB.prestamos.filter(p => p.id !== id);
+  guardarDB(); renderPrestamos(); updateDashboard();
+  toast('🗑️ Préstamo eliminado');
+}
+
+// ══════════════════════════════════════════════
+// DEVOLUCIONES
+// ══════════════════════════════════════════════
+function renderDevoluciones() {
+  actualizarMorosos();
+  const q = (document.getElementById('buscar-devolucion')?.value || '').toLowerCase();
+  const pendientes = DB.prestamos.filter(p => {
+    if (p.estado === 'devuelto') return false;
+    if (!q) return true;
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return p.socioId.toLowerCase().includes(q)
+      || (s?.nombre || '').toLowerCase().includes(q)
+      || p.recursoId.toLowerCase().includes(q)
+      || (r?.titulo || '').toLowerCase().includes(q);
+  }).sort((a,b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
+
+  document.getElementById('tbody-devoluciones').innerHTML = pendientes.length === 0
+    ? `<tr><td colspan="9" class="text-center py-8 text-gray-400">Sin préstamos pendientes</td></tr>`
+    : pendientes.map(p => {
+        const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+        const rowCls = p.estado === 'moroso' ? 'bg-red-50' : 'hover:bg-slate-50';
+        return `<tr class="${rowCls}">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${s?.codigo || p.socioId}</td>
+          <td class="px-4 py-3 text-sm">${s?.nombre || '—'}</td>
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${r?.codigo || p.recursoId}</td>
+          <td class="px-4 py-3 text-sm">${r?.titulo || '—'}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.tipoPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.fechaPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.fechaVencimiento}</td>
+          <td class="px-4 py-3">${badgeEstado(p.estado)}</td>
+          <td class="px-4 py-3">
+            <button onclick="procesarDevolucion(${p.id})" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg font-medium">✓ Devolver</button>
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+function procesarDevolucion(id) {
+  if (!confirm('¿Confirmar devolución?')) return;
+  const p = DB.prestamos.find(p => p.id === id);
+  if (p) {
+    p.estado = 'devuelto';
+    p.fechaDevolucion = hoy();
+    guardarDB(); renderDevoluciones(); updateDashboard();
+    toast('✅ Devolución registrada', 'green');
+  }
+}
+
+// ══════════════════════════════════════════════
+// MOROSOS
+// ══════════════════════════════════════════════
+function renderMorosos() {
+  actualizarMorosos();
+  const q = (document.getElementById('buscar-moroso')?.value || '').toLowerCase();
+  const morosos = DB.prestamos.filter(p => {
+    if (p.estado !== 'moroso') return false;
+    if (!q) return true;
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return p.socioId.toLowerCase().includes(q)
+      || (s?.nombre || '').toLowerCase().includes(q)
+      || p.recursoId.toLowerCase().includes(q)
+      || (r?.titulo || '').toLowerCase().includes(q);
+  }).sort((a,b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento));
+
+  document.getElementById('tbody-morosos').innerHTML = morosos.length === 0
+    ? `<tr><td colspan="9" class="text-center py-8 text-gray-400">Sin morosos 🎉</td></tr>`
+    : morosos.map(p => {
+        const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+        const dias = Math.floor((new Date(hoy()) - new Date(p.fechaVencimiento)) / 86400000);
+        return `<tr class="bg-red-50">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${s?.codigo || p.socioId}</td>
+          <td class="px-4 py-3 text-sm font-medium text-red-800">${s?.nombre || '—'}</td>
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${r?.codigo || p.recursoId}</td>
+          <td class="px-4 py-3 text-sm">${r?.titulo || '—'}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.tipoPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.fechaPrestamo}</td>
+          <td class="px-4 py-3 text-red-600 text-xs font-semibold">${p.fechaVencimiento}</td>
+          <td class="px-4 py-3">
+            <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-red-200 text-red-800">${dias} día(s)</span>
+          </td>
+          <td class="px-4 py-3">
+            <button onclick="procesarDevolucion(${p.id})" class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg font-medium">✓ Devolver</button>
+          </td>
+        </tr>`;
+      }).join('');
+}
+
+// ══════════════════════════════════════════════
+// MOVIMIENTOS POR MES
+// ══════════════════════════════════════════════
+function renderMovimientos() {
+  actualizarMorosos();
+  const mes   = document.getElementById('mov-mes').value; // YYYY-MM
+  const tipo  = document.getElementById('mov-tipo').value;
+  if (!mes) return;
+
+  const todos = DB.prestamos.filter(p => {
+    const fecha = tipo === 'devuelto' ? (p.fechaDevolucion || '') : p.fechaPrestamo;
+    if (!fecha.startsWith(mes)) return false;
+    if (tipo && p.estado !== tipo) return false;
+    return true;
+  }).sort((a,b) => {
+    const fa = tipo === 'devuelto' ? a.fechaDevolucion : a.fechaPrestamo;
+    const fb = tipo === 'devuelto' ? b.fechaDevolucion : b.fechaPrestamo;
+    return fb.localeCompare(fa);
+  });
+
+  // Resumen
+  const totalPrestados   = DB.prestamos.filter(p => p.fechaPrestamo.startsWith(mes) && p.estado !== 'devuelto' && true).length;
+  const prestadosMes = DB.prestamos.filter(p => p.fechaPrestamo.startsWith(mes)).length;
+  const devueltosMes = DB.prestamos.filter(p => (p.fechaDevolucion||'').startsWith(mes)).length;
+  const morososMes   = DB.prestamos.filter(p => p.fechaPrestamo.startsWith(mes) && p.estado === 'moroso').length;
+
+  document.getElementById('mov-resumen').innerHTML = [
+    { label: 'Préstamos', val: prestadosMes, color: 'blue' },
+    { label: 'Devoluciones', val: devueltosMes, color: 'green' },
+    { label: 'Morosos', val: morososMes, color: 'red' }
+  ].map(c => `<div class="bg-${c.color}-50 border border-${c.color}-200 rounded-lg p-3 text-center">
+    <p class="text-${c.color}-600 text-xs font-semibold uppercase">${c.label}</p>
+    <p class="text-${c.color}-800 text-2xl font-bold">${c.val}</p>
+  </div>`).join('');
+
+  document.getElementById('tbody-movimientos').innerHTML = todos.length === 0
+    ? `<tr><td colspan="7" class="text-center py-8 text-gray-400">Sin movimientos para este mes/filtro</td></tr>`
+    : todos.map(p => {
+        const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+        const fecha = tipo === 'devuelto' ? p.fechaDevolucion : p.fechaPrestamo;
+        return `<tr class="hover:bg-slate-50 ${p.estado === 'moroso' ? 'bg-red-50' : ''}">
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${s?.codigo || p.socioId}</td>
+          <td class="px-4 py-3 text-sm">${s?.nombre || '—'}</td>
+          <td class="px-4 py-3 mono font-semibold text-blue-700 text-xs">${r?.codigo || p.recursoId}</td>
+          <td class="px-4 py-3 text-sm">${r?.titulo || '—'}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${p.tipoPrestamo}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">${fecha || '—'}</td>
+          <td class="px-4 py-3">${badgeEstado(p.estado)}</td>
+        </tr>`;
+      }).join('');
+}
+
+// ══════════════════════════════════════════════
+// IMPORT / EXPORT EXCEL
+// ══════════════════════════════════════════════
+function leerExcel(callback) {
+  const inp = document.getElementById('file-input');
+  inp.value = '';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb   = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+        callback(data);
+      } catch(e) { toast('⚠️ Error al leer el archivo', 'red'); }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  inp.click();
+}
+
+function col(row, ...keys) {
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== '') return String(row[k]).trim();
+  }
+  const found = Object.keys(row).find(k => keys.some(q => k.toLowerCase() === q.toLowerCase()));
+  return found !== undefined ? String(row[found]).trim() : '';
+}
+
+function importarSocios() {
+  leerExcel(data => {
+    let n = 0;
+    data.forEach(row => {
+      const codigo = col(row,'Codigo','codigo','CODIGO','Código','CÓDIGO');
+      const nombre = col(row,'Nombre','nombre','NOMBRE');
+      if (!codigo || !nombre) return;
+      if (!DB.socios.some(s => s.codigo === codigo)) { DB.socios.push({ codigo, nombre }); n++; }
+    });
+    guardarDB(); renderSocios(); updateDashboard();
+    toast(`✅ ${n} socios importados`, 'green');
+  });
+}
+
+function exportarSocios() {
+  const ws = XLSX.utils.json_to_sheet(DB.socios.map(s => ({ Codigo: s.codigo, Nombre: s.nombre })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Socios');
+  XLSX.writeFile(wb, `socios_${hoy()}.xlsx`);
+}
+
+function importarRecursos() {
+  leerExcel(data => {
+    let n = 0;
+    data.forEach(row => {
+      const codigo = col(row,'Codigo','codigo','CODIGO','Código','CÓDIGO');
+      const titulo = col(row,'Titulo','titulo','TITULO','Título','TÍTULO');
+      if (!codigo || !titulo) return;
+      if (!DB.recursos.some(r => r.codigo === codigo)) { DB.recursos.push({ codigo, titulo }); n++; }
+    });
+    guardarDB(); renderRecursos(); updateDashboard();
+    toast(`✅ ${n} recursos importados`, 'green');
+  });
+}
+
+function exportarRecursos() {
+  const ws = XLSX.utils.json_to_sheet(DB.recursos.map(r => ({
+    Codigo: r.codigo, Titulo: r.titulo, Estado: estadoRecurso(r.codigo)
+  })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Recursos');
+  XLSX.writeFile(wb, `recursos_${hoy()}.xlsx`);
+}
+
+function exportarPrestamos() {
+  const rows = DB.prestamos.map(p => {
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return {
+      CodigoSocio: p.socioId, NombreSocio: s?.nombre || '',
+      CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo || '',
+      TipoPrestamo: p.tipoPrestamo,
+      FechaPrestamo: p.fechaPrestamo, FechaVencimiento: p.fechaVencimiento,
+      FechaDevolucion: p.fechaDevolucion, Estado: p.estado
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Prestamos');
+  XLSX.writeFile(wb, `prestamos_${hoy()}.xlsx`);
+  toast('📤 Préstamos exportados', 'green');
+}
+
+function exportarDevoluciones() {
+  const rows = DB.prestamos.filter(p => p.estado === 'devuelto').map(p => {
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return {
+      CodigoSocio: p.socioId, NombreSocio: s?.nombre || '',
+      CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo || '',
+      TipoPrestamo: p.tipoPrestamo,
+      FechaPrestamo: p.fechaPrestamo, FechaVencimiento: p.fechaVencimiento,
+      FechaDevolucion: p.fechaDevolucion
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Devoluciones');
+  XLSX.writeFile(wb, `devoluciones_${hoy()}.xlsx`);
+  toast('📤 Devoluciones exportadas', 'green');
+}
+
+function exportarMorosos() {
+  actualizarMorosos();
+  const rows = DB.prestamos.filter(p => p.estado === 'moroso').map(p => {
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    const dias = Math.floor((new Date(hoy()) - new Date(p.fechaVencimiento)) / 86400000);
+    return {
+      CodigoSocio: p.socioId, NombreSocio: s?.nombre || '',
+      CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo || '',
+      TipoPrestamo: p.tipoPrestamo,
+      FechaPrestamo: p.fechaPrestamo, FechaVencimiento: p.fechaVencimiento,
+      DiasVencido: dias
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Morosos');
+  XLSX.writeFile(wb, `morosos_${hoy()}.xlsx`);
+  toast('📤 Morosos exportados', 'green');
+}
+
+function exportarMovimientos() {
+  const mes  = document.getElementById('mov-mes').value;
+  const tipo = document.getElementById('mov-tipo').value;
+  if (!mes) { toast('⚠️ Seleccioná un mes', 'red'); return; }
+
+  const rows = DB.prestamos.filter(p => {
+    const fecha = tipo === 'devuelto' ? (p.fechaDevolucion || '') : p.fechaPrestamo;
+    if (!fecha.startsWith(mes)) return false;
+    if (tipo && p.estado !== tipo) return false;
+    return true;
+  }).map(p => {
+    const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+    return {
+      CodigoSocio: p.socioId, NombreSocio: s?.nombre || '',
+      CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo || '',
+      TipoPrestamo: p.tipoPrestamo,
+      FechaPrestamo: p.fechaPrestamo, FechaVencimiento: p.fechaVencimiento,
+      FechaDevolucion: p.fechaDevolucion, Estado: p.estado
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Movimientos_${mes}`);
+  XLSX.writeFile(wb, `movimientos_${mes}.xlsx`);
+  toast('📤 Movimientos exportados', 'green');
+}
+
+// ══════════════════════════════════════════════
+// RESGUARDO SEGURO
+// ══════════════════════════════════════════════
+function backupData() {
+  document.getElementById('modal-backup').classList.remove('hidden');
+}
+
+function ejecutarBackup() {
+  cerrarModal('modal-backup');
+
+  // Generar checksum simple
+  const payload = {
+    version:   '2.0',
+    fecha:     new Date().toISOString(),
+    checksum:  simpleHash(JSON.stringify(DB)),
+    data:      DB
+  };
+
+  // JSON
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `resguardo_biblioteca_${hoy()}.json`;
+  a.click();
+
+  // Excel completo (4 hojas)
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(DB.socios.map(s => ({ Codigo: s.codigo, Nombre: s.nombre }))),
+    'Socios');
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(DB.recursos.map(r => ({ Codigo: r.codigo, Titulo: r.titulo, Estado: estadoRecurso(r.codigo) }))),
+    'Recursos');
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(DB.prestamos.filter(p => p.estado !== 'devuelto').map(p => {
+      const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+      return { CodigoSocio: p.socioId, NombreSocio: s?.nombre||'', CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo||'', Tipo: p.tipoPrestamo, FechaPrestamo: p.fechaPrestamo, Vencimiento: p.fechaVencimiento, Estado: p.estado };
+    })),
+    'Prestamos_Activos');
+  XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(DB.prestamos.map(p => {
+      const s = getSocio(p.socioId), r = getRecurso(p.recursoId);
+      return { CodigoSocio: p.socioId, NombreSocio: s?.nombre||'', CodigoRecurso: p.recursoId, TituloRecurso: r?.titulo||'', Tipo: p.tipoPrestamo, FechaPrestamo: p.fechaPrestamo, Vencimiento: p.fechaVencimiento, Devolucion: p.fechaDevolucion, Estado: p.estado };
+    })),
+    'Historial_Completo');
+  XLSX.writeFile(wb, `resguardo_biblioteca_${hoy()}.xlsx`);
+  toast('✅ Resguardo descargado correctamente', 'green');
+}
+
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(16).toUpperCase();
+}
+
+// ── RESTAURAR BACKUP ──
+function restoreBackup() {
+  if (!confirm('⚠️ Restaurar un resguardo REEMPLAZARÁ todos los datos actuales. ¿Continuar?')) return;
+  const inp = document.getElementById('file-restore');
+  inp.value = '';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const payload = JSON.parse(ev.target.result);
+        let data;
+
+        // Soporte para formato nuevo (con .data) y formato antiguo (datos directos)
+        if (payload.data) {
+          const cs = simpleHash(JSON.stringify(payload.data));
+          if (payload.checksum && payload.checksum !== cs) {
+            toast('⚠️ El archivo puede estar dañado (checksum inválido)', 'red');
+          }
+          data = payload.data;
+        } else if (payload.socios || payload.recursos || payload.prestamos) {
+          data = payload;
+        } else {
+          throw new Error('Formato no reconocido');
+        }
+
+        DB.socios    = data.socios    || [];
+        DB.recursos  = data.recursos  || [];
+        DB.prestamos = data.prestamos || [];
+        guardarDB();
+        actualizarMorosos();
+        showTab('dashboard');
+        toast('✅ Datos restaurados correctamente', 'green');
+      } catch(e) {
+        toast('⚠️ No se pudo restaurar el archivo', 'red');
+      }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+// ══════════════════════════════════════════════
+// CERRAR AUTOCOMPLETE AL HACER CLICK AFUERA
+// ══════════════════════════════════════════════
+document.addEventListener('click', e => {
+  if (!e.target.closest('#p-buscar-socio') && !e.target.closest('#ac-socios')) {
+    document.getElementById('ac-socios').classList.add('hidden');
+  }
+  if (!e.target.closest('#p-buscar-recurso') && !e.target.closest('#ac-recursos')) {
+    document.getElementById('ac-recursos').classList.add('hidden');
+  }
+});
+
+// Cerrar modales con backdrop
+document.querySelectorAll('.fixed.inset-0').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.add('hidden');
+  });
+});
+
+// Tecla ESC cierra modales
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach(m => m.classList.add('hidden'));
+  }
+});
+
+// ══════════════════════════════════════════════
+// GESTIÓN DE BASE DE DATOS
+// ══════════════════════════════════════════════
+function abrirGestionDB() {
+  document.getElementById('modal-gestion-db').classList.remove('hidden');
+}
+
+// ── Estado de checkboxes baja selectiva ──
+const _bajaSeleccion = { socios: false, recursos: false, prestamos: false };
+
+function abrirBajaSelectiva() {
+  // Reset estado
+  _bajaSeleccion.socios = false;
+  _bajaSeleccion.recursos = false;
+  _bajaSeleccion.prestamos = false;
+  ['socios','recursos','prestamos'].forEach(k => {
+    _actualizarCheckBaja(k, false);
+    document.getElementById('aviso-' + k).classList.add('hidden');
+  });
+  document.getElementById('baja-resumen').classList.add('hidden');
+  document.getElementById('baja-sin-seleccion').classList.remove('hidden');
+  const btn = document.getElementById('btn-ejecutar-baja');
+  btn.disabled = true;
+  btn.className = 'flex-1 px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-semibold cursor-not-allowed transition';
+  document.getElementById('modal-baja-db').classList.remove('hidden');
+}
+
+function toggleBajaCheck(key) {
+  _bajaSeleccion[key] = !_bajaSeleccion[key];
+  _actualizarCheckBaja(key, _bajaSeleccion[key]);
+  // Mostrar aviso contextual
+  const aviso = document.getElementById('aviso-' + key);
+  if (_bajaSeleccion[key]) aviso.classList.remove('hidden');
+  else aviso.classList.add('hidden');
+  _actualizarResumenBaja();
+}
+
+function _actualizarCheckBaja(key, activo) {
+  const box = document.getElementById('check-' + key);
+  const lbl = document.getElementById('lbl-baja-' + key);
+  if (activo) {
+    box.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    box.className = 'mt-0.5 w-5 h-5 rounded border-2 border-red-500 bg-red-500 flex items-center justify-center flex-shrink-0 transition';
+    lbl.className = 'flex items-start gap-3 p-3 border-2 border-red-400 bg-red-50 rounded-lg cursor-pointer hover:border-red-500 transition select-none';
+  } else {
+    box.innerHTML = '';
+    box.className = 'mt-0.5 w-5 h-5 rounded border-2 border-gray-300 flex items-center justify-center flex-shrink-0 transition';
+    lbl.className = 'flex items-start gap-3 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-red-300 transition select-none';
+  }
+}
+
+function _actualizarResumenBaja() {
+  const items = [];
+  if (_bajaSeleccion.socios)    items.push({ texto: `${DB.socios.length} socios`, nota: 'Los préstamos se conservan' });
+  if (_bajaSeleccion.recursos)  items.push({ texto: `${DB.recursos.length} recursos`, nota: 'Los préstamos se conservan' });
+  if (_bajaSeleccion.prestamos) items.push({ texto: `${DB.prestamos.length} registros de préstamos / devoluciones / morosos`, nota: null });
+
+  const resumen = document.getElementById('baja-resumen');
+  const lista   = document.getElementById('baja-resumen-lista');
+  const sinSel  = document.getElementById('baja-sin-seleccion');
+  const btn     = document.getElementById('btn-ejecutar-baja');
+
+  if (items.length === 0) {
+    resumen.classList.add('hidden');
+    sinSel.classList.remove('hidden');
+    btn.disabled = true;
+    btn.className = 'flex-1 px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-semibold cursor-not-allowed transition';
+  } else {
+    sinSel.classList.add('hidden');
+    resumen.classList.remove('hidden');
+    lista.innerHTML = items.map(i =>
+      `<li>• ${i.texto}${i.nota ? ` <span class="text-amber-600">(${i.nota})</span>` : ''}</li>`
+    ).join('');
+    btn.disabled = false;
+    btn.className = 'flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold cursor-pointer transition';
+  }
+}
+
+function ejecutarBajaDB() {
+  const partes = [];
+  if (_bajaSeleccion.socios)    { DB.socios = [];    partes.push('socios'); }
+  if (_bajaSeleccion.recursos)  { DB.recursos = [];  partes.push('recursos'); }
+  if (_bajaSeleccion.prestamos) { DB.prestamos = []; partes.push('préstamos'); }
+  guardarDB();
+  cerrarModal('modal-baja-db');
+  showTab('dashboard');
+  toast(`🗑️ Se eliminaron: ${partes.join(', ')}`, 'red');
+}
+
+// ══════════════════════════════════════════════
+// EXPORTAR / IMPORTAR SOCIOS EXCEL
+// ══════════════════════════════════════════════
+function exportarSociosExcel() {
+  const rows = DB.socios.map(s => {
+    const nP = DB.prestamos.filter(p => p.socioId === s.codigo && (p.estado === 'prestado' || p.estado === 'moroso')).length;
+    const isMoroso = DB.prestamos.some(p => p.socioId === s.codigo && p.estado === 'moroso');
+    return {
+      Codigo: s.codigo,
+      Nombre: s.nombre,
+      Prestamos_Activos: nP,
+      Es_Moroso: isMoroso ? 'SÍ' : 'NO'
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Ancho de columnas
+  ws['!cols'] = [{ wch: 18 }, { wch: 40 }, { wch: 18 }, { wch: 12 }];
+
+  // Cabecera de aviso
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Socios');
+
+  // Hoja de instrucciones
+  const instrRows = [
+    { Instruccion: '=== INSTRUCCIONES PARA IMPORTAR SOCIOS ===' },
+    { Instruccion: '1. Modificá la hoja "Socios": podés editar Nombre, agregar filas nuevas o borrar filas.' },
+    { Instruccion: '2. Las columnas Codigo y Nombre son las únicas que se importan.' },
+    { Instruccion: '3. NO borres ni renombres la columna "Codigo" ni "Nombre".' },
+    { Instruccion: '4. Guardá el archivo y usá el botón "Importar Excel" en Socios.' },
+    { Instruccion: '5. ADVERTENCIA: al importar se reemplaza SOLO la lista de socios (no los préstamos).' },
+  ];
+  const wsI = XLSX.utils.json_to_sheet(instrRows);
+  wsI['!cols'] = [{ wch: 80 }];
+  XLSX.utils.book_append_sheet(wb, wsI, 'Instrucciones');
+
+  XLSX.writeFile(wb, `socios_biblioteca_${hoy()}.xlsx`);
+  toast('📤 Lista de socios exportada a Excel', 'green');
+}
+
+function importarSociosExcel() {
+  const inp = document.getElementById('file-socios-excel');
+  inp.value = '';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'binary' });
+        const ws = wb.Sheets['Socios'] || wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        // Detectar columnas
+        const first = rows[0] || {};
+        const keyCod = Object.keys(first).find(k => k.toLowerCase().includes('codigo') || k.toLowerCase().includes('código'));
+        const keyNom = Object.keys(first).find(k => k.toLowerCase().includes('nombre'));
+
+        if (!keyCod || !keyNom) {
+          toast('⚠️ No se encontraron columnas "Codigo" y "Nombre"', 'red');
+          return;
+        }
+
+        const nuevos = rows
+          .map(r => ({ codigo: String(r[keyCod] || '').trim(), nombre: String(r[keyNom] || '').trim() }))
+          .filter(s => s.codigo);
+
+        if (nuevos.length === 0) {
+          toast('⚠️ No se encontraron socios válidos en el archivo', 'red');
+          return;
+        }
+
+        const confirmMsg = `Se importarán ${nuevos.length} socios.\nEsto REEMPLAZARÁ la lista actual de socios.\nLos préstamos e historial se conservan.\n\n¿Continuar?`;
+        if (!confirm(confirmMsg)) return;
+
+        DB.socios = nuevos;
+        guardarDB();
+        renderSocios();
+        showTab('socios');
+        toast(`✅ ${nuevos.length} socios importados correctamente`, 'green');
+      } catch(err) {
+        toast('⚠️ Error al leer el archivo Excel', 'red');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+  inp.click();
+}
+
+cargarDB();
+showTab('dashboard');
+</script>
+</body>
+</html>
